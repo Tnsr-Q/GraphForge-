@@ -1,7 +1,3 @@
-
-
-
-
 // FIX: Change React import to default import to fix JSX namespace issues with react-three-fiber.
 import React from 'react';
 // FIX: Import THREE to resolve namespace errors.
@@ -11,6 +7,7 @@ import { EffectsState } from './EffectsPanel';
 import { EPGlows } from './visual-effects/EPGlows';
 import { Streamlines } from './visual-effects/Streamlines';
 import { FluxHeatmap } from './visual-effects/FluxHeatmap';
+import { TopologicalRibbon } from './visual-effects/TopologicalRibbon';
 
 interface ParticlesState {
     positions: THREE.Vector3[];
@@ -38,6 +35,7 @@ const VisualEffects: React.FC<VisualEffectsProps> = ({
             {effectsState.epGlows && <EPGlows potentialFn={potentialFn} />}
             {effectsState.streamlines && <Streamlines potentialFn={potentialFn} xRange={xRange} yRange={yRange} />}
             {effectsState.fluxHeatmap && particleCount > 0 && <FluxHeatmap particlePositions={particlesStateRef.current.positions} xRange={xRange} yRange={yRange} particleCount={particleCount}/>}
+            {effectsState.topologicalRibbon && <TopologicalRibbon potentialFn={potentialFn} />}
         </group>
     );
 };

@@ -1,6 +1,3 @@
-
-
-
 // FIX: Change React import to default import to fix JSX namespace issues with react-three-fiber.
 import React from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
@@ -11,7 +8,7 @@ import { createConfiguredMathParser } from '../services/math-parser';
 import { VideoIcon, CodeIcon, ExclamationIcon, GraphIcon, ImageIcon, PlayIcon, PauseIcon, WireframeIcon, RecordingIcon, SettingsIcon } from './Icons';
 import saveAs from 'file-saver';
 import { toPng } from 'html-to-image';
-import { getColorFromMap, getColormapGradient } from '../services/color-maps';
+import { getColorFromMap, getColormapGradient, COLOR_MAP_NAMES } from '../services/color-maps';
 import { Muxer } from 'mp4-muxer';
 import { ParticleSystem } from './ParticleSystem';
 import EffectsPanel, { EffectsState } from './EffectsPanel';
@@ -69,19 +66,38 @@ const GraphSurface: React.FC<{ surfaceData: SurfaceData | null; time: number; is
 
     React.useLayoutEffect(() => {
         if (!materialRef.current || !surfaceData) return;
+        const colorMapIndex = COLOR_MAP_NAMES.indexOf(surfaceData.colorMap);
+        
         materialRef.current.onBeforeCompile = (shader) => {
             shader.uniforms.zRange = { value: new THREE.Vector2(surfaceData.zRange.min, surfaceData.zRange.max) };
+            shader.uniforms.colorMapIndex = { value: colorMapIndex };
+            
             shader.vertexShader = 'attribute float gradMag;\nvarying float vGradMag;\nvarying float vRelativeZ;\n' + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvGradMag = gradMag;\nvRelativeZ = position.y;\n');
-            shader.fragmentShader = 'varying float vGradMag;\nvarying float vRelativeZ;\nuniform vec2 zRange;\n' +
-                `vec3 plasma(float t) { t = clamp(t, 0.0, 1.0); return vec3(pow(t, 0.5)*0.8, pow(t, 1.5), 1.0 - pow(t, 0.7)); }\n` + // Simplified GLSL plasma
-                `vec3 viridis( float t ) { const vec3 c0 = vec3( 0.27772754, 0.00540737, 0.34449032 ); const vec3 c1 = vec3( 0.24415848, 0.32359487, 0.61333634 ); const vec3 c2 = vec3( 0.02111388, 0.65528418, 0.51868341 ); const vec3 c3 = vec3( 0.54226848, 0.8903444, 0.14134015 ); const vec3 c4 = vec3( 0.9838611, 0.94480188, 0.3678248 ); return c0 + t * (c1 + t * (c2 + t * (c3 + t * c4))); }\n` +
+            
+            shader.fragmentShader = 'varying float vGradMag;\nvarying float vRelativeZ;\nuniform vec2 zRange;\nuniform int colorMapIndex;\n' +
+                // Colormap functions in GLSL
+                `vec3 viridis( float t ) { const vec3 c0 = vec3( 0.277, 0.005, 0.344 ); const vec3 c1 = vec3( 0.244, 0.323, 0.613 ); const vec3 c2 = vec3( 0.021, 0.655, 0.518 ); const vec3 c3 = vec3( 0.542, 0.890, 0.141 ); const vec3 c4 = vec3( 0.983, 0.944, 0.367 ); return c0 + t * (c1 + t * (c2 + t * (c3 + t * c4))); }\n` +
+                `vec3 plasma( float t ) { const vec3 c0 = vec3(0.05, 0.03, 0.53); const vec3 c1 = vec3(0.44, 0.09, 0.75); const vec3 c2 = vec3(0.74, 0.24, 0.67); const vec3 c3 = vec3(0.95, 0.46, 0.43); const vec3 c4 = vec3(0.98, 0.74, 0.16); const vec3 c5 = vec3(0.97, 0.98, 0.56); t=t*t; return c0 + t*(c1-c0) + t*t*(c2-c1) + t*t*t*(c3-c2) + t*t*t*t*(c4-c3) + t*t*t*t*t*(c5-c4); }\n` +
+                `vec3 inferno( float t ) { const vec3 c0 = vec3(0.0, 0.0, 0.0); const vec3 c1 = vec3(0.35, 0.0, 0.46); const vec3 c2 = vec3(0.75, 0.2, 0.37); const vec3 c3 = vec3(0.98, 0.55, 0.0); const vec3 c4 = vec3(0.98, 0.98, 0.6); t=t*t; return c0 + t*(c1-c0) + t*t*(c2-c1) + t*t*t*(c3-c2) + t*t*t*t*(c4-c3); }\n` +
+                `vec3 magma( float t ) { const vec3 c0 = vec3(0.0, 0.0, 0.0); const vec3 c1 = vec3(0.28, 0.1, 0.48); const vec3 c2 = vec3(0.68, 0.25, 0.52); const vec3 c3 = vec3(0.96, 0.58, 0.33); const vec3 c4 = vec3(0.99, 0.98, 0.8); t=t*t; return c0 + t*(c1-c0) + t*t*(c2-c1) + t*t*t*(c3-c2) + t*t*t*t*(c4-c3); }\n` +
+                `vec3 hot( float t ) { return vec3( smoothstep(0.0, 0.4, t), smoothstep(0.4, 0.8, t), smoothstep(0.8, 1.0, t) ); }\n` +
+                `vec3 cool( float t ) { return vec3(t, 1.0 - t, 1.0); }\n` +
+                `vec3 defaultMap( float t ) { return mix(vec3(0.2, 0.2, 0.8), vec3(0.8, 0.2, 0.2), t); }\n` +
                 shader.fragmentShader.replace(
                     'vec4 diffuseColor = vec4( diffuse, opacity );',
-                    `float zPercent = (vRelativeZ - zRange.x) / (zRange.y - zRange.x);
-                     vec3 baseColor = viridis(zPercent);
+                    `float zPercent = clamp((vRelativeZ - zRange.x) / (zRange.y - zRange.x), 0.0, 1.0);
+                     vec3 baseColor;
+                     if (colorMapIndex == 0) baseColor = viridis(zPercent);
+                     else if (colorMapIndex == 1) baseColor = plasma(zPercent);
+                     else if (colorMapIndex == 2) baseColor = inferno(zPercent);
+                     else if (colorMapIndex == 3) baseColor = magma(zPercent);
+                     else if (colorMapIndex == 4) baseColor = hot(zPercent);
+                     else if (colorMapIndex == 5) baseColor = cool(zPercent);
+                     else baseColor = defaultMap(zPercent);
+
                      float edgeIntensity = min(vGradMag / 5.0, 1.0);
-                     vec3 edgeColor = mix(baseColor, vec3(1.0), edgeIntensity * 0.3);
-                     float ambientFactor = 0.3 + 0.7 * clamp(zPercent, 0.0, 1.0);
+                     vec3 edgeColor = mix(baseColor, vec3(1.0, 1.0, 1.0), edgeIntensity * 0.3);
+                     float ambientFactor = 0.3 + 0.7 * zPercent;
                      vec3 finalColor = edgeColor * ambientFactor;
                      vec4 diffuseColor = vec4( finalColor, opacity );`
                 );
@@ -174,15 +190,24 @@ const ViewportPanel: React.FC<{ graphData: GraphIR | null; error: string | null;
   const [recordProgress, setRecordProgress] = React.useState(0);
   const [isEffectsPanelVisible, setIsEffectsPanelVisible] = React.useState(true);
   const [effectsState, setEffectsState] = React.useState<EffectsState>({
-      streamlines: true, particleTrails: true, epGlows: true, fluxHeatmap: false,
+      streamlines: true, particleTrails: true, epGlows: true, fluxHeatmap: false, topologicalRibbon: true,
   });
   
   const surfaceData = React.useMemo(() => graphData ? generateSurfaceData(graphData) : null, [graphData]);
+  
   const potentialFn = React.useMemo(() => {
     if (!surfaceData) return () => 0;
     const mathParser = createConfiguredMathParser(surfaceData.functions);
     return (x: number, y: number): number => {
-        try { if (surfaceData.animParam) mathParser.set(surfaceData.animParam, time); mathParser.set('x', x); mathParser.set('y', y); const z = mathParser.evaluate(surfaceData.plotExpr); return isNaN(z) || !isFinite(z) ? 0 : z; } catch (e) { return 0; }
+        try { 
+            if (surfaceData.animParam) mathParser.set(surfaceData.animParam, time); 
+            mathParser.set('x', x); 
+            mathParser.set('y', y); 
+            const z = mathParser.evaluate(surfaceData.plotExpr); 
+            return isNaN(z) || !isFinite(z) ? 0 : z; 
+        } catch (e) { 
+            return 0; 
+        }
     };
   }, [surfaceData, time]);
 
@@ -216,7 +241,17 @@ const ViewportPanel: React.FC<{ graphData: GraphIR | null; error: string | null;
                 <GraphSurface surfaceData={surfaceData} time={time} isWireframeVisible={isWireframeVisible}/>
                 {graphData.contours && <ContourLines surfaceData={surfaceData} graphData={graphData} time={time} />}
                 {graphData.labels && <GraphLabels labels={graphData.labels} graphData={graphData} time={time} />}
-                {graphData.particles && surfaceData && <ParticleSystem count={graphData.particles.count} surfaceData={surfaceData} xRange={graphData.ranges.x} yRange={graphData.ranges.y} time={time} particlesStateRef={particlesStateRef} showTrails={effectsState.particleTrails} />}
+                {graphData.particles && surfaceData && (
+                    <ParticleSystem 
+                        key={surfaceData.plotExpr}
+                        count={graphData.particles.count} 
+                        potentialFn={potentialFn}
+                        xRange={graphData.ranges.x} 
+                        yRange={graphData.ranges.y} 
+                        particlesStateRef={particlesStateRef} 
+                        showTrails={effectsState.particleTrails} 
+                    />
+                )}
                 
                 <VisualEffects
                     effectsState={effectsState}

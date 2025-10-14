@@ -7,38 +7,32 @@ SET RANGE X -8 TO 8
 SET RANGE Y -8 TO 8
 SET RANGE Z -4 TO 12
 COLOR MAP plasma
-ANIMATE t FROM 0 TO 12.56 STEP 0.05
 
 # Define the components of the potential function
 DEF FNPI = 3.1415926535
 DEF FNMANIFOLD(x,y) = EXP(-0.3*(x^2 + y^2)) * COS(SQRT(x^2 + y^2))
 
-# Time-dependent wavefunctions for quantum ripples
-DEF FNPSI1_ANIM(x,y,t) = (x^2 - y^2) * EXP(-0.15*(x^2 + y^2)) * SIN(2*FNPI*SQRT(x^2 + y^2)/8 - t)
-DEF FNPSI2_ANIM(x,y,t) = 2*x*y * EXP(-0.15*(x^2 + y^2)) * COS(2*FNPI*SQRT(x^2 + y^2)/8 - t)
+# Static part of the wavefunction
+DEF FNPSI1(x,y) = (x^2 - y^2) * EXP(-0.15*(x^2 + y^2)) * SIN(2*FNPI*SQRT(x^2 + y^2)/8)
+DEF FNPSI2(x,y) = 2*x*y * EXP(-0.15*(x^2 + y^2)) * COS(2*FNPI*SQRT(x^2 + y^2)/8)
 
 # Define the four exceptional points (EPs)
 DEF FNEP(x,y) = 2.5/((x-3)^2+(y-2)^2+0.3) + 3.0/((x+2)^2+(y-4)^2+0.3) + 2.0/((x+4)^2+(y+3)^2+0.3) + 2.8/((x-2)^2+(y+4)^2+0.3)
 
-# Static part of the surface for labels, including the non-animated part of the wavefunction
-DEF FNPSI1_STATIC(x,y) = (x^2 - y^2) * EXP(-0.15*(x^2 + y^2)) * SIN(2*FNPI*SQRT(x^2 + y^2)/8)
-DEF FNPSI2_STATIC(x,y) = 2*x*y * EXP(-0.15*(x^2 + y^2)) * COS(2*FNPI*SQRT(x^2 + y^2)/8)
-DEF FNSURFACE_STATIC(x,y) = FNMANIFOLD(x,y) + 0.4*FNPSI1_STATIC(x,y) + 0.4*FNPSI2_STATIC(x,y) + 0.8*FNEP(x,y)
+# Combine functions into the final surface potential
+DEF FNSURFACE(x,y) = FNMANIFOLD(x,y) + 0.4*FNPSI1(x,y) + 0.4*FNPSI2(x,y) + 0.8*FNEP(x,y)
 
-# Combine functions into the final animated surface potential
-DEF FNSURFACE_ANIM(x,y,t) = FNMANIFOLD(x,y) + 0.4*FNPSI1_ANIM(x,y,t) + 0.4*FNPSI2_ANIM(x,y,t) + 0.8*FNEP(x,y)
-
-# Add labels for the exceptional points, using the static surface for Z coordinate
-LABEL "EP1" AT 3, 2, FNSURFACE_STATIC(3,2) + 0.5
-LABEL "EP2" AT -2, 4, FNSURFACE_STATIC(-2,4) + 0.5
-LABEL "EP3" AT -4, -3, FNSURFACE_STATIC(-4,-3) + 0.5
-LABEL "EP4" AT 2, -4, FNSURFACE_STATIC(2,-4) + 0.5
+# Add labels for the exceptional points
+LABEL "EP1" AT 3, 2, FNSURFACE(3,2) + 0.5
+LABEL "EP2" AT -2, 4, FNSURFACE(-2,4) + 0.5
+LABEL "EP3" AT -4, -3, FNSURFACE(-4,-3) + 0.5
+LABEL "EP4" AT 2, -4, FNSURFACE(2,-4) + 0.5
 
 # Add 500 physics-driven particles to the simulation
 PARTICLES 500
 
 # Plot the 3D potential surface
-PLOT3D FNSURFACE_ANIM(x,y,t)
+PLOT3D FNSURFACE(x,y)
 `.trim();
 
 export const GEMINI_SYSTEM_INSTRUCTION = `You are an expert in a BASIC-like 3D graphing language called G3D-BASIC. Your task is to generate G3D-BASIC code based on user requests.

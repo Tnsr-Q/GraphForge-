@@ -6,6 +6,7 @@ export interface EffectsState {
   particleTrails: boolean;
   epGlows: boolean;
   fluxHeatmap: boolean;
+  topologicalRibbon: boolean;
 }
 
 interface EffectsPanelProps {
@@ -23,6 +24,7 @@ const EffectsPanel: React.FC<EffectsPanelProps> = ({ state, setState }) => {
     particleTrails: "Particle Trails",
     epGlows: "EP Glows",
     fluxHeatmap: "Flux Heatmap",
+    topologicalRibbon: "Topological Ribbon",
   };
 
   return (

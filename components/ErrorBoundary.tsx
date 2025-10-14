@@ -1,6 +1,8 @@
 // FIX: Changed to a default import for React to maintain consistency across the
 // project and resolve potential module resolution issues with libraries that augment
 // the React namespace, such as react-three-fiber.
+// FIX: Extending `React.Component` directly to resolve type errors where
+// `this.props` and `this.setState` were not being recognized.
 import React from 'react';
 import { ExclamationIcon } from './Icons';
 
@@ -14,8 +16,12 @@ interface State {
 }
 
 class ErrorBoundary extends React.Component<Props, State> {
-  state: State = {
+  // FIX: The constructor-based state initialization was causing issues with TypeScript's type inference
+  // for this component, leading to errors about missing 'state', 'props', and 'setState' properties.
+  // Replaced it with a class property for state, which is a more modern and less error-prone syntax.
+  public state: State = {
     hasError: false,
+    error: undefined,
   };
 
   static getDerivedStateFromError(error: Error): State {

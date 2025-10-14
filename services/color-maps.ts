@@ -11,6 +11,8 @@ const HOT = [ [0.041, 0, 0], [0.4, 0, 0], [0.8, 0, 0], [1, 0.35, 0], [1, 0.8, 0]
 const COOL = [ [0, 1, 1], [1, 0, 1] ];
 const DEFAULT_MAP = [ [0.2, 0.2, 0.8], [0.8, 0.2, 0.2] ];
 
+export const COLOR_MAP_NAMES: ColorMapName[] = ['viridis', 'plasma', 'inferno', 'magma', 'hot', 'cool', 'default'];
+
 const COLOR_MAPS: Record<ColorMapName, number[][]> = {
   viridis: VIRIDIS,
   plasma: PLASMA,

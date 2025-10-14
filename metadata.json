@@ -1,5 +1,5 @@
 {
-  "name": "GraphForge Studio",
+  "name": "Copy of GraphForge Studio",
   "description": "An interactive visualization tool for 3D graphs from G3D files, with export capabilities for SVG, video, and GRTL formats. Includes an AI-powered code generator.",
   "requestFramePermissions": []
 }

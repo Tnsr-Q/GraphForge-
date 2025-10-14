@@ -1,12 +1,11 @@
 import React from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { G3DFunction, Range } from '../types';
-import { Line } from '@react-three/drei';
+import { Range } from '../types';
 
 const GAMMA = 0.5;
 const ALPHA = 2.0;
-const PARTICLE_SIZE = 0.08;
+const PARTICLE_SIZE = 0.35;
 const TRAIL_LENGTH = 50;
 
 const EXCEPTIONAL_POINTS = [
@@ -32,92 +31,80 @@ interface ParticlesState {
 
 interface ParticleSystemProps {
   count: number;
-  surfaceData: {
-    plotExpr: string;
-    functions: { [key: string]: G3DFunction };
-    animParam: string | null;
-  };
+  potentialFn: (x: number, y: number) => number;
   xRange: Range;
   yRange: Range;
-  time: number;
   particlesStateRef: React.RefObject<ParticlesState>;
   showTrails: boolean;
 }
 
-const ParticleTrails: React.FC<{ trails: THREE.Vector3[][] }> = ({ trails }) => {
+const ParticleTrails: React.FC<{ trails: THREE.Vector3[][]; count: number }> = ({ trails, count }) => {
+    const lineRef = React.useRef<THREE.LineSegments>(null!);
+    
+    const [positions, colors] = React.useMemo(() => {
+        const maxSegments = count * (TRAIL_LENGTH - 1);
+        return [
+            new Float32Array(maxSegments * 2 * 3), // Each segment has 2 vertices, each vertex has 3 coordinates
+            new Float32Array(maxSegments * 2 * 3)  // Each vertex has an RGB color
+        ];
+    }, [count]);
+
+    React.useLayoutEffect(() => {
+        if (!lineRef.current) return;
+        const geometry = lineRef.current.geometry;
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+        let vertexIndex = 0;
+        let colorIndex = 0;
+        
+        for (const trail of trails) {
+            for (let i = 0; i < trail.length - 1; i++) {
+                const p1 = trail[i];
+                const p2 = trail[i+1];
+
+                positions[vertexIndex++] = p1.x;
+                positions[vertexIndex++] = p1.y;
+                positions[vertexIndex++] = p1.z;
+                positions[vertexIndex++] = p2.x;
+                positions[vertexIndex++] = p2.y;
+                positions[vertexIndex++] = p2.z;
+
+                // Fade out effect: newer segments are brighter
+                const alpha = (i / TRAIL_LENGTH);
+                colors[colorIndex++] = 1.0 * alpha;
+                colors[colorIndex++] = 1.0 * alpha;
+                colors[colorIndex++] = 1.0 * alpha;
+                colors[colorIndex++] = 1.0 * alpha;
+                colors[colorIndex++] = 1.0 * alpha;
+                colors[colorIndex++] = 1.0 * alpha;
+            }
+        }
+        
+        // Hide unused buffer capacity
+        geometry.setDrawRange(0, vertexIndex / 3);
+        
+        geometry.attributes.position.needsUpdate = true;
+        geometry.attributes.color.needsUpdate = true;
+        geometry.computeBoundingSphere();
+
+    }, [trails, positions, colors]);
+
     return (
-        <group>
-            {trails.map((points, i) => (
-                points.length > 1 && (
-                    <Line
-                        key={i}
-                        points={points}
-                        color="white"
-                        lineWidth={2}
-                        transparent
-                        opacity={0.6}
-                    />
-                )
-            ))}
-        </group>
+        <lineSegments ref={lineRef}>
+            <bufferGeometry />
+            <lineBasicMaterial vertexColors transparent opacity={0.7} />
+        </lineSegments>
     );
 };
 
 export const ParticleSystem: React.FC<ParticleSystemProps> = ({ 
-  count, surfaceData, xRange, yRange, time, particlesStateRef, showTrails 
+  count, potentialFn, xRange, yRange, particlesStateRef, showTrails 
 }) => {
   const meshRef = React.useRef<THREE.InstancedMesh>(null);
   const particlesRef = React.useRef<Particle[]>([]);
-  const phiRef = React.useRef<((x: number, y: number, t: number) => number) | null>(null);
   const [trails, setTrails] = React.useState<THREE.Vector3[][]>([]);
   const initializeRef = React.useRef(false); // Track if first update done
-
-  // Initialize Phi (same as before)
-  React.useEffect(() => {
-    const { plotExpr, functions, animParam } = surfaceData;
-    
-    const mathScope: any = {
-      sin: Math.sin, cos: Math.cos, tan: Math.tan,
-      asin: Math.asin, acos: Math.acos, atan: Math.atan, atan2: Math.atan2,
-      sqrt: Math.sqrt, log: Math.log, exp: Math.exp, pow: Math.pow, abs: Math.abs,
-      pi: Math.PI, PI: Math.PI
-    };
-
-    const remainingFunctions = { ...functions };
-    let changedInLastPass = true;
-    const maxPasses = Object.keys(functions).length + 2;
-    let passes = 0;
-
-    while (Object.keys(remainingFunctions).length > 0 && changedInLastPass && passes < maxPasses) {
-        changedInLastPass = false;
-        passes++;
-        for (const name in remainingFunctions) {
-            const fn = remainingFunctions[name];
-            try {
-                const func = new Function(...fn.params, `with(this) { return ${fn.body}; }`);
-                mathScope[name] = func.bind(mathScope);
-                delete remainingFunctions[name];
-                changedInLastPass = true;
-            } catch (e) { }
-        }
-    }
-
-    const plotFunction = new Function('scope', `with(scope) { return ${plotExpr}; }`);
-    phiRef.current = (x: number, y: number, t: number) => {
-        const localScope = Object.create(mathScope);
-        localScope.x = x;
-        localScope.y = y;
-        if (animParam) localScope[animParam] = t;
-        try {
-            const z = plotFunction(localScope);
-            return isNaN(z) || !isFinite(z) ? 0 : z;
-        } catch (e) {
-            return 0;
-        }
-    };
-    
-    initializeRef.current = false; // Reset on surface change
-  }, [surfaceData]);
 
   // Initialize particles
   React.useEffect(() => {
@@ -142,19 +129,16 @@ export const ParticleSystem: React.FC<ParticleSystemProps> = ({
 
   // Physics + rendering
   useFrame((_, delta) => {
-    if (!meshRef.current || !phiRef.current) return;
+    if (!meshRef.current || !potentialFn) return;
     
     const dt = Math.min(0.016, delta);
-    const Phi = phiRef.current;
     const particles = particlesRef.current;
     
     // Initialize positions on first frame
     if (!initializeRef.current) {
-      console.log('[ParticleSystem] Initializing particle positions...');
-      
       const tempMatrix = new THREE.Matrix4();
       particles.forEach((p, i) => {
-        const z = Phi(p.x, p.y, time);
+        const z = potentialFn(p.x, p.y);
         tempMatrix.makeScale(PARTICLE_SIZE, PARTICLE_SIZE, PARTICLE_SIZE);
         tempMatrix.setPosition(p.x, z + 0.1, -p.y);
         meshRef.current!.setMatrixAt(i, tempMatrix);
@@ -162,16 +146,13 @@ export const ParticleSystem: React.FC<ParticleSystemProps> = ({
       
       meshRef.current.instanceMatrix.needsUpdate = true;
       initializeRef.current = true;
-      console.log('[ParticleSystem] Positions initialized');
       return; // Skip physics on first frame
     }
     
-    const timedPhi = (x: number, y: number) => Phi(x, y, time);
-    
     const computeGradient = (x: number, y: number) => {
         const h = 0.01;
-        const dFdx = (timedPhi(x + h, y) - timedPhi(x - h, y)) / (2 * h);
-        const dFdy = (timedPhi(x, y + h) - timedPhi(x, y - h)) / (2 * h);
+        const dFdx = (potentialFn(x + h, y) - potentialFn(x - h, y)) / (2 * h);
+        const dFdy = (potentialFn(x, y + h) - potentialFn(x, y - h)) / (2 * h);
         return { dx: dFdx, dy: dFdy };
     };
 
@@ -180,22 +161,23 @@ export const ParticleSystem: React.FC<ParticleSystemProps> = ({
     const tempMatrix = new THREE.Matrix4();
 
     particles.forEach((p, i) => {
-        // Verlet integration
+        // Improved Velocity Verlet for velocity-dependent forces (like damping)
         const grad1 = computeGradient(p.x, p.y);
         const ax1 = -GAMMA * p.vx - ALPHA * grad1.dx;
         const ay1 = -GAMMA * p.vy - ALPHA * grad1.dy;
-        
-        p.x += p.vx * dt + 0.5 * ax1 * dt * dt;
-        p.y += p.vy * dt + 0.5 * ay1 * dt * dt;
-        
-        const grad2 = computeGradient(p.x, p.y);
-        const ax2 = -GAMMA * p.vx - ALPHA * grad2.dx;
-        const ay2 = -GAMMA * p.vy - ALPHA * grad2.dy;
-        
+        const new_x = p.x + p.vx * dt + 0.5 * ax1 * dt * dt;
+        const new_y = p.y + p.vy * dt + 0.5 * ay1 * dt * dt;
+        const pred_vx = p.vx + ax1 * dt;
+        const pred_vy = p.vy + ay1 * dt;
+        const grad2 = computeGradient(new_x, new_y);
+        const ax2 = -GAMMA * pred_vx - ALPHA * grad2.dx;
+        const ay2 = -GAMMA * pred_vy - ALPHA * grad2.dy;
         p.vx += 0.5 * (ax1 + ax2) * dt;
         p.vy += 0.5 * (ay1 + ay2) * dt;
+        p.x = new_x;
+        p.y = new_y;
         
-        // Boundary conditions
+        // Boundary conditions (inelastic bounce)
         if (Math.abs(p.x) > xRange.max) { 
           p.x = Math.sign(p.x) * xRange.max; 
           p.vx *= -0.8; 
@@ -205,7 +187,7 @@ export const ParticleSystem: React.FC<ParticleSystemProps> = ({
           p.vy *= -0.8; 
         }
         
-        // Safety respawn
+        // Safety respawn for numerical instability
         if (!isFinite(p.x) || !isFinite(p.y)) {
             const ep = EXCEPTIONAL_POINTS[p.id % EXCEPTIONAL_POINTS.length];
             const radius = 1.0 + Math.random() * 1.5;
@@ -217,8 +199,7 @@ export const ParticleSystem: React.FC<ParticleSystemProps> = ({
             p.trail = [];
         }
         
-        // Position particle on surface
-        const z = timedPhi(p.x, p.y);
+        const z = potentialFn(p.x, p.y);
         tempMatrix.makeScale(PARTICLE_SIZE, PARTICLE_SIZE, PARTICLE_SIZE);
         tempMatrix.setPosition(p.x, z + 0.1, -p.y);
         meshRef.current!.setMatrixAt(i, tempMatrix);
@@ -233,7 +214,7 @@ export const ParticleSystem: React.FC<ParticleSystemProps> = ({
             p.trail = [];
         }
         
-        // Color
+        // Color based on speed and proximity to exceptional points
         const speed = Math.sqrt(p.vx ** 2 + p.vy ** 2);
         const colorFactor = Math.min(1, speed / 4.0);
         
@@ -263,14 +244,13 @@ export const ParticleSystem: React.FC<ParticleSystemProps> = ({
     
     if (particlesStateRef.current) {
         particlesStateRef.current.positions = particles.map(p => {
-            const z = timedPhi(p.x, p.y);
+            const z = potentialFn(p.x, p.y);
             return new THREE.Vector3(p.x, z + 0.1, -p.y);
         });
         particlesStateRef.current.trails = newTrails;
     }
   });
 
-  // Geometry/Material same as before
   const sphereGeometry = React.useMemo(() => {
     const geo = new THREE.SphereGeometry(PARTICLE_SIZE, 12, 8);
     geo.setAttribute('instanceColor', new THREE.InstancedBufferAttribute(new Float32Array(count * 3), 3));
@@ -308,7 +288,7 @@ export const ParticleSystem: React.FC<ParticleSystemProps> = ({
         args={[sphereGeometry, particleMaterial, count]}
         frustumCulled={false}
       />
-      {showTrails && trails.length > 0 && <ParticleTrails trails={trails} />}
+      {showTrails && trails.length > 0 && <ParticleTrails trails={trails} count={count} />}
     </>
   );
 };
