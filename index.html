@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GraphForge Studio</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              'gray': {
+                '850': '#182030',
+                '950': '#0b0f1a'
+              },
+            }
+          }
+        }
+      }
+    </script>
+  <script type="importmap">
+{
+  "imports": {
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.22.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "file-saver": "https://aistudiocdn.com/file-saver@^2.0.5",
+    "mathjs": "https://aistudiocdn.com/mathjs@^14.8.2",
+    "html-to-image": "https://aistudiocdn.com/html-to-image@^1.11.13",
+    "three": "https://aistudiocdn.com/three@^0.168.0",
+    "@react-three/fiber": "https://esm.sh/@react-three/fiber@9.3.0?external=react,react-dom,three",
+    "@react-three/drei": "https://esm.sh/@react-three/drei@10.7.6?external=react,react-dom,three,@react-three/fiber",
+    "@monaco-editor/react": "https://esm.sh/@monaco-editor/react@4.6.0?external=react",
+    "mp4-muxer": "https://esm.sh/mp4-muxer@5.2.2"
+  }
+}
+</script>
+</head>
+  <body class="bg-gray-950">
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
