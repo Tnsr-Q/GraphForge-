@@ -9,6 +9,7 @@ interface StreamlinesProps {
     potentialFn: (x: number, y: number) => number;
     xRange: Range;
     yRange: Range;
+    opacity: number;
 }
 
 const computeGradient = (x: number, y: number, Phi: (x: number, y: number) => number) => {
@@ -46,7 +47,7 @@ const generateStreamline = (startX: number, startY: number, Phi: (x: number, y: 
     return { points, magnitudes };
 };
 
-const Streamline: React.FC<{ points: THREE.Vector3[]; magnitudes: number[] }> = ({ points, magnitudes }) => {
+const Streamline: React.FC<{ points: THREE.Vector3[]; magnitudes: number[]; opacity: number }> = ({ points, magnitudes, opacity }) => {
     if (points.length < 2) return null;
 
     const colors = React.useMemo(() => {
@@ -69,12 +70,12 @@ const Streamline: React.FC<{ points: THREE.Vector3[]; magnitudes: number[] }> = 
             vertexColors={colors} 
             lineWidth={1 + avgMag * 0.5} 
             transparent 
-            opacity={0.6}
+            opacity={opacity}
         />
     );
 };
 
-export const Streamlines: React.FC<StreamlinesProps> = ({ potentialFn, xRange, yRange }) => {
+export const Streamlines: React.FC<StreamlinesProps> = ({ potentialFn, xRange, yRange, opacity }) => {
     const streamlines = React.useMemo(() => {
         const lines = [];
         const count = 30;
@@ -92,7 +93,7 @@ export const Streamlines: React.FC<StreamlinesProps> = ({ potentialFn, xRange, y
     return (
         <group>
             {streamlines.map(line => (
-                <Streamline key={line.id} points={line.points} magnitudes={line.magnitudes} />
+                <Streamline key={line.id} points={line.points} magnitudes={line.magnitudes} opacity={opacity}/>
             ))}
         </group>
     );

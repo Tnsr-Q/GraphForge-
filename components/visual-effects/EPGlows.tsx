@@ -1,21 +1,11 @@
-
-
-
-
 // FIX: Change React import to default import to fix JSX namespace issues with react-three-fiber.
 import React from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { Billboard, Plane } from '@react-three/drei';
+import { EXCEPTIONAL_POINTS } from '../../constants';
 
-const exceptionalPoints = [
-    { x: 3, y: 2, residue: 2.5 },
-    { x: -2, y: 4, residue: 3.0 },
-    { x: -4, y: -3, residue: 2.0 },
-    { x: 2, y: -4, residue: 2.8 },
-];
-
-const Glow: React.FC<{ position: [number, number, number]; residue: number; frequency: number }> = ({ position, residue, frequency }) => {
+const Glow: React.FC<{ position: [number, number, number]; residue: number; intensityFactor: number; frequency: number }> = ({ position, residue, intensityFactor, frequency }) => {
     const lightRef = React.useRef<THREE.PointLight>(null!);
     const spriteRef = React.useRef<THREE.Mesh>(null!);
     
@@ -36,9 +26,10 @@ const Glow: React.FC<{ position: [number, number, number]; residue: number; freq
     useFrame(({ clock }) => {
         const t = clock.getElapsedTime();
         const pulse = (Math.sin(t * frequency * Math.PI * 2) + 1) / 2; // 0 to 1
-        const intensity = residue * (0.5 + pulse * 1.5);
+        const finalResidue = residue * intensityFactor;
+        const intensity = finalResidue * (0.5 + pulse * 1.5);
         lightRef.current.intensity = intensity;
-        const scale = residue * (0.8 + pulse * 0.4);
+        const scale = finalResidue * (0.8 + pulse * 0.4);
         spriteRef.current.scale.set(scale, scale, scale);
     });
 
@@ -54,14 +45,19 @@ const Glow: React.FC<{ position: [number, number, number]; residue: number; freq
     );
 };
 
-export const EPGlows: React.FC<{ potentialFn: (x: number, y: number) => number }> = ({ potentialFn }) => {
-    const frequencies = React.useMemo(() => exceptionalPoints.map(() => 0.5 + Math.random() * 1.5), []);
+export const EPGlows: React.FC<{ 
+    potentialFn: (x: number, y: number) => number;
+    residues: { [key: string]: number };
+    intensityFactor: number;
+}> = ({ potentialFn, residues, intensityFactor }) => {
+    const frequencies = React.useMemo(() => EXCEPTIONAL_POINTS.map(() => 0.5 + Math.random() * 1.5), []);
     
     return (
         <group>
-            {exceptionalPoints.map((ep, i) => {
+            {EXCEPTIONAL_POINTS.map((ep, i) => {
                 const z = potentialFn(ep.x, ep.y);
-                return <Glow key={i} position={[ep.x, z, -ep.y]} residue={ep.residue} frequency={frequencies[i]} />;
+                const residue = residues[ep.key as keyof typeof residues] ?? ep.defaultResidue;
+                return <Glow key={i} position={[ep.x, z, -ep.y]} residue={residue} intensityFactor={intensityFactor} frequency={frequencies[i]} />;
             })}
         </group>
     );

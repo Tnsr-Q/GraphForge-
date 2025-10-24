@@ -2,18 +2,7 @@ import React from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { Range } from '../types';
-
-const GAMMA = 0.5;
-const ALPHA = 2.0;
-const PARTICLE_SIZE = 0.35;
-const TRAIL_LENGTH = 50;
-
-const EXCEPTIONAL_POINTS = [
-    { x: 3, y: 2, r: 2.5 },
-    { x: -2, y: 4, r: 3.0 },
-    { x: -4, y: -3, r: 2.0 },
-    { x: 2, y: -4, r: 2.8 }
-];
+import { EXCEPTIONAL_POINTS } from '../constants';
 
 interface Particle {
     id: number;
@@ -36,18 +25,22 @@ interface ParticleSystemProps {
   yRange: Range;
   particlesStateRef: React.RefObject<ParticlesState>;
   showTrails: boolean;
+  damping: number;
+  forceCoupling: number;
+  particleSize: number;
+  trailLength: number;
 }
 
-const ParticleTrails: React.FC<{ trails: THREE.Vector3[][]; count: number }> = ({ trails, count }) => {
+const ParticleTrails: React.FC<{ trails: THREE.Vector3[][]; count: number; trailLength: number }> = ({ trails, count, trailLength }) => {
     const lineRef = React.useRef<THREE.LineSegments>(null!);
     
     const [positions, colors] = React.useMemo(() => {
-        const maxSegments = count * (TRAIL_LENGTH - 1);
+        const maxSegments = count * (trailLength - 1);
         return [
             new Float32Array(maxSegments * 2 * 3), // Each segment has 2 vertices, each vertex has 3 coordinates
             new Float32Array(maxSegments * 2 * 3)  // Each vertex has an RGB color
         ];
-    }, [count]);
+    }, [count, trailLength]);
 
     React.useLayoutEffect(() => {
         if (!lineRef.current) return;
@@ -71,7 +64,7 @@ const ParticleTrails: React.FC<{ trails: THREE.Vector3[][]; count: number }> = (
                 positions[vertexIndex++] = p2.z;
 
                 // Fade out effect: newer segments are brighter
-                const alpha = (i / TRAIL_LENGTH);
+                const alpha = (i / trailLength);
                 colors[colorIndex++] = 1.0 * alpha;
                 colors[colorIndex++] = 1.0 * alpha;
                 colors[colorIndex++] = 1.0 * alpha;
@@ -88,7 +81,7 @@ const ParticleTrails: React.FC<{ trails: THREE.Vector3[][]; count: number }> = (
         geometry.attributes.color.needsUpdate = true;
         geometry.computeBoundingSphere();
 
-    }, [trails, positions, colors]);
+    }, [trails, positions, colors, trailLength]);
 
     return (
         <lineSegments ref={lineRef}>
@@ -99,7 +92,8 @@ const ParticleTrails: React.FC<{ trails: THREE.Vector3[][]; count: number }> = (
 };
 
 export const ParticleSystem: React.FC<ParticleSystemProps> = ({ 
-  count, potentialFn, xRange, yRange, particlesStateRef, showTrails 
+  count, potentialFn, xRange, yRange, particlesStateRef, showTrails, 
+  damping, forceCoupling, particleSize, trailLength
 }) => {
   const meshRef = React.useRef<THREE.InstancedMesh>(null);
   const particlesRef = React.useRef<Particle[]>([]);
@@ -139,7 +133,7 @@ export const ParticleSystem: React.FC<ParticleSystemProps> = ({
       const tempMatrix = new THREE.Matrix4();
       particles.forEach((p, i) => {
         const z = potentialFn(p.x, p.y);
-        tempMatrix.makeScale(PARTICLE_SIZE, PARTICLE_SIZE, PARTICLE_SIZE);
+        tempMatrix.makeScale(particleSize, particleSize, particleSize);
         tempMatrix.setPosition(p.x, z + 0.1, -p.y);
         meshRef.current!.setMatrixAt(i, tempMatrix);
       });
@@ -163,15 +157,15 @@ export const ParticleSystem: React.FC<ParticleSystemProps> = ({
     particles.forEach((p, i) => {
         // Improved Velocity Verlet for velocity-dependent forces (like damping)
         const grad1 = computeGradient(p.x, p.y);
-        const ax1 = -GAMMA * p.vx - ALPHA * grad1.dx;
-        const ay1 = -GAMMA * p.vy - ALPHA * grad1.dy;
+        const ax1 = -damping * p.vx - forceCoupling * grad1.dx;
+        const ay1 = -damping * p.vy - forceCoupling * grad1.dy;
         const new_x = p.x + p.vx * dt + 0.5 * ax1 * dt * dt;
         const new_y = p.y + p.vy * dt + 0.5 * ay1 * dt * dt;
         const pred_vx = p.vx + ax1 * dt;
         const pred_vy = p.vy + ay1 * dt;
         const grad2 = computeGradient(new_x, new_y);
-        const ax2 = -GAMMA * pred_vx - ALPHA * grad2.dx;
-        const ay2 = -GAMMA * pred_vy - ALPHA * grad2.dy;
+        const ax2 = -damping * pred_vx - forceCoupling * grad2.dx;
+        const ay2 = -damping * pred_vy - forceCoupling * grad2.dy;
         p.vx += 0.5 * (ax1 + ax2) * dt;
         p.vy += 0.5 * (ay1 + ay2) * dt;
         p.x = new_x;
@@ -200,7 +194,7 @@ export const ParticleSystem: React.FC<ParticleSystemProps> = ({
         }
         
         const z = potentialFn(p.x, p.y);
-        tempMatrix.makeScale(PARTICLE_SIZE, PARTICLE_SIZE, PARTICLE_SIZE);
+        tempMatrix.makeScale(particleSize, particleSize, particleSize);
         tempMatrix.setPosition(p.x, z + 0.1, -p.y);
         meshRef.current!.setMatrixAt(i, tempMatrix);
         
@@ -208,7 +202,7 @@ export const ParticleSystem: React.FC<ParticleSystemProps> = ({
         if (showTrails) {
             const trailPoint = new THREE.Vector3(p.x, z + 0.1, -p.y);
             p.trail.push(trailPoint);
-            if (p.trail.length > TRAIL_LENGTH) p.trail.shift();
+            if (p.trail.length > trailLength) p.trail.shift();
             newTrails.push([...p.trail]);
         } else {
             p.trail = [];
@@ -252,7 +246,7 @@ export const ParticleSystem: React.FC<ParticleSystemProps> = ({
   });
 
   const sphereGeometry = React.useMemo(() => {
-    const geo = new THREE.SphereGeometry(PARTICLE_SIZE, 12, 8);
+    const geo = new THREE.SphereGeometry(1, 12, 8); // Base size is 1, will be scaled by matrix
     geo.setAttribute('instanceColor', new THREE.InstancedBufferAttribute(new Float32Array(count * 3), 3));
     return geo;
   }, [count]);
@@ -288,7 +282,7 @@ export const ParticleSystem: React.FC<ParticleSystemProps> = ({
         args={[sphereGeometry, particleMaterial, count]}
         frustumCulled={false}
       />
-      {showTrails && trails.length > 0 && <ParticleTrails trails={trails} count={count} />}
+      {showTrails && trails.length > 0 && <ParticleTrails trails={trails} count={count} trailLength={trailLength} />}
     </>
   );
 };

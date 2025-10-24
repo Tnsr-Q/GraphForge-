@@ -64,3 +64,18 @@ export interface Point3D {
   y: number;
   z: number;
 }
+
+export interface ExperimentalPoint {
+  id: string;
+  x: number;
+  y: number;
+  residue: number;
+  uncertainty: number;
+}
+
+export interface ValidationResults {
+  rms: number;
+  maxDeviation: number;
+  passFailStatus: 'THEOREM B.5 CONFIRMED' | 'FALSIFIED';
+  deviations: { ep: string; deviation: number }[];
+}
