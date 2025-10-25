@@ -76,10 +76,10 @@ const ControlsPanel: React.FC<ControlsPanelProps> = ({ controls, setControl, eff
         <section>
           <h3 className="font-bold mb-3 text-base text-cyan-400">Topology</h3>
            <div className="space-y-4">
-              <Slider label="EP1 Residue" min={0} max={5} step={0.1} value={controls.ep1Residue} onChange={(v) => setControl('ep1Residue', v)} />
-              <Slider label="EP2 Residue" min={0} max={5} step={0.1} value={controls.ep2Residue} onChange={(v) => setControl('ep2Residue', v)} />
-              <Slider label="EP3 Residue" min={0} max={5} step={0.1} value={controls.ep3Residue} onChange={(v) => setControl('ep3Residue', v)} />
-              <Slider label="EP4 Residue" min={0} max={5} step={0.1} value={controls.ep4Residue} onChange={(v) => setControl('ep4Residue', v)} />
+              <Slider label="EP1 Residue" min={0} max={5} step={0.01} value={controls.ep1Residue} onChange={(v) => setControl('ep1Residue', v)} />
+              <Slider label="EP2 Residue" min={0} max={5} step={0.01} value={controls.ep2Residue} onChange={(v) => setControl('ep2Residue', v)} />
+              <Slider label="EP3 Residue" min={0} max={5} step={0.01} value={controls.ep3Residue} onChange={(v) => setControl('ep3Residue', v)} />
+              <Slider label="EP4 Residue" min={0} max={5} step={0.01} value={controls.ep4Residue} onChange={(v) => setControl('ep4Residue', v)} />
           </div>
         </section>
 

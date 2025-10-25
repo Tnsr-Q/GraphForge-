@@ -4,7 +4,55 @@ const VALID_COLOR_MAPS: ColorMapName[] = ['viridis', 'plasma', 'inferno', 'magma
 const MAX_PARTICLES = 5000;
 
 export const parseG3D = (code: string): GraphIR => {
-  const lines = code.split('\n').map(line => line.split('#')[0].trim()).filter(line => line.length > 0);
+  // Step 1: Pre-process to handle explicit multi-line statements with backslashes.
+  const backslashProcessedLines: string[] = [];
+  let lineBuffer = '';
+  code.split('\n').forEach(line => {
+    const trimmed = line.split('#')[0].trim();
+    if (!trimmed) return;
+    
+    lineBuffer += (lineBuffer ? ' ' : '') + trimmed;
+    
+    if (lineBuffer.endsWith('\\')) {
+      lineBuffer = lineBuffer.slice(0, -1);
+    } else {
+      backslashProcessedLines.push(lineBuffer);
+      lineBuffer = '';
+    }
+  });
+  if (lineBuffer) {
+      backslashProcessedLines.push(lineBuffer);
+  }
+
+  // Step 2: Pre-process to handle implicit multi-line DEF statements.
+  const finalProcessedLines: string[] = [];
+  let defBuffer = '';
+  const keywordsRegex = /^(SET|COLOR|PLOT3D|ANIMATE|PARTICLES|CONTOUR|LABEL)\s/i;
+
+  for (const line of backslashProcessedLines) {
+    if (line.match(/^DEF\s/i)) {
+      if (defBuffer) {
+        finalProcessedLines.push(defBuffer);
+      }
+      defBuffer = line;
+    } 
+    else if (defBuffer && !line.match(keywordsRegex)) {
+      defBuffer += ` ${line}`;
+    } 
+    else {
+      if (defBuffer) {
+        finalProcessedLines.push(defBuffer);
+        defBuffer = '';
+      }
+      finalProcessedLines.push(line);
+    }
+  }
+
+  if (defBuffer) {
+    finalProcessedLines.push(defBuffer);
+  }
+  
+  const lines = finalProcessedLines.filter(line => line.length > 0);
 
   const ir: GraphIR = {
     version: 1,

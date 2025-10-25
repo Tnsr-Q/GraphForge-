@@ -78,7 +78,7 @@ const DataPanel: React.FC<DataPanelProps> = ({ setExperimentalData, setValidatio
                                 throw new Error('CSV is missing required columns: ep_id, re_lambda, im_lambda, measured_residue, uncertainty');
                             }
                             return {
-                                id: String(row.ep_id),
+                                id: 'EP' + String(row.ep_id),
                                 x: row.re_lambda,
                                 y: row.im_lambda,
                                 residue: row.measured_residue,

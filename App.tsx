@@ -58,7 +58,7 @@ const App: React.FC = () => {
         if (residueName) {
             setG3dCode(currentCode => {
                 const regex = new RegExp(`(DEF\\s+${residueName}\\s*=\\s*)[-0-9.]+`, 'i');
-                return currentCode.replace(regex, `$1${value.toFixed(1)}`);
+                return currentCode.replace(regex, `$1${value.toFixed(2)}`);
             });
         }
     }
