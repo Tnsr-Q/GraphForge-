@@ -3,7 +3,7 @@ import React from 'react';
 import { Canvas, useFrame, ThreeEvent } from '@react-three/fiber';
 import { Grid, Text, CameraControls } from '@react-three/drei';
 import * as THREE from 'three';
-import { GraphIR, Animation, ColorMapName, Label as LabelType, G3DFunction, ExperimentalPoint, ValidationResults } from '../types';
+import { GraphIR, Animation, ColorMapName, Label as LabelType, G3DFunction, ExperimentalPoint, ValidationResults, SurfacePlot, VectorPlot, TensorPlot } from '../types';
 import { createConfiguredMathParser } from '../services/math-parser';
 import { VideoIcon, CodeIcon, ExclamationIcon, GraphIcon, ImageIcon, PlayIcon, PauseIcon, WireframeIcon, RecordingIcon, RulerIcon, ButterflyIcon } from './Icons';
 import saveAs from 'file-saver';
@@ -17,6 +17,8 @@ import { calculateGeodesicPath } from '../services/geodesic';
 import { DistanceMeasurement, MeasurementData } from './DistanceMeasurement';
 import { generateLyapunovGrid } from '../services/lyapunov';
 import { ExperimentalDataOverlay } from './ExperimentalDataOverlay';
+import { VectorField } from './visual-effects/VectorField';
+import { TensorGlyphs } from './visual-effects/TensorGlyphs';
 
 export interface SurfaceData {
     geometry: THREE.BufferGeometry;
@@ -69,11 +71,13 @@ const CameraManager: React.FC<{ preset: string | null; onTransitionEnd: () => vo
 };
 
 const generateSurfaceData = (graphData: GraphIR): SurfaceData | null => {
-    if (!graphData || graphData.plots.length === 0) return null;
+    const surfacePlot = graphData.plots.find(p => p.type === 'surface') as SurfacePlot;
+    if (!graphData || !surfacePlot) return null;
+
     const mathParser = createConfiguredMathParser(graphData.functions || {});
     const { x: xRange, y: yRange, z: zRange } = graphData.ranges;
     const colorMap = graphData.colorMap || 'default';
-    const plot = graphData.plots[0]; const plotExpr = plot.expr;
+    const plotExpr = surfacePlot.expr;
     const xSteps = 60; const ySteps = 60;
     const vertices = []; const colors = []; const indices = []; const originalXY = []; const gradMags = []; const uvs = [];
     if (graphData.animation) { mathParser.set(graphData.animation.parameter, graphData.animation.from || 0); }
@@ -278,9 +282,11 @@ const ViewportPanel: React.FC<ViewportPanelProps> = ({
   const [measurementData, setMeasurementData] = React.useState<MeasurementData>({ points: [], path: null, distance: null });
 
   const surfaceData = React.useMemo(() => graphData ? generateSurfaceData(graphData) : null, [graphData]);
+  const vectorPlots = React.useMemo(() => graphData?.plots.filter(p => p.type === 'vector') as VectorPlot[] || [], [graphData]);
+  const tensorPlots = React.useMemo(() => graphData?.plots.filter(p => p.type === 'tensor') as TensorPlot[] || [], [graphData]);
   
   const potentialFn = React.useMemo(() => {
-    if (!surfaceData) return () => 0;
+    if (!surfaceData) return () => 0; // Return a flat plane if no surface is plotted
     const mathParser = createConfiguredMathParser(surfaceData.functions);
     return (x: number, y: number): number => {
         try { 
@@ -351,7 +357,7 @@ const ViewportPanel: React.FC<ViewportPanelProps> = ({
 
   const renderContent = () => {
     if (error) return <div className="flex flex-col items-center justify-center h-full text-center text-red-400"><ExclamationIcon className="h-12 w-12 mb-4" /><h3 className="text-lg font-semibold">Parsing Error</h3><p className="font-mono bg-red-900/50 p-4 rounded-md mt-2 text-sm">{error}</p></div>;
-    if (!graphData || !surfaceData) return <div className="flex flex-col items-center justify-center h-full text-center text-gray-500"><GraphIcon className="h-12 w-12 mb-4" /><h3 className="text-lg font-semibold">No Data to Display</h3><p className="mt-2 text-sm">Valid G3D code will render a plot here.</p></div>;
+    if (!graphData || graphData.plots.length === 0) return <div className="flex flex-col items-center justify-center h-full text-center text-gray-500"><GraphIcon className="h-12 w-12 mb-4" /><h3 className="text-lg font-semibold">No Data to Display</h3><p className="mt-2 text-sm">Valid G3D code will render a plot here.</p></div>;
     
     const { x, y, z } = graphData.ranges;
     const center = [ (x.min + x.max) / 2, (z.min + z.max) / 2, -(y.min + y.max) / 2 ];
@@ -366,12 +372,34 @@ const ViewportPanel: React.FC<ViewportPanelProps> = ({
                 <pointLight position={[-size, -size, -size]} distance={0} intensity={Math.PI} />
                 
                 <AnimationController isPlaying={isPlaying} animation={animation} setTime={setTime} />
-                <GraphSurface surfaceData={surfaceData} time={time} isWireframeVisible={isWireframeVisible} onSurfaceClick={handleSurfaceClick} lyapunovTexture={lyapunovTexture} showLyapunov={effects.lyapunovViz} />
-                {graphData.contours && <ContourLines surfaceData={surfaceData} graphData={graphData} time={time} />}
+                
+                {surfaceData && <GraphSurface surfaceData={surfaceData} time={time} isWireframeVisible={isWireframeVisible} onSurfaceClick={handleSurfaceClick} lyapunovTexture={lyapunovTexture} showLyapunov={effects.lyapunovViz} />}
+                
+                {vectorPlots.map(plot => (
+                    <VectorField
+                        key={plot.fnName}
+                        plot={plot}
+                        graphData={graphData}
+                        potentialFn={potentialFn}
+                        time={time}
+                    />
+                ))}
+
+                {tensorPlots.map(plot => (
+                    <TensorGlyphs
+                        key={plot.fnName}
+                        plot={plot}
+                        graphData={graphData}
+                        potentialFn={potentialFn}
+                        time={time}
+                    />
+                ))}
+
+                {surfaceData && graphData.contours && <ContourLines surfaceData={surfaceData} graphData={graphData} time={time} />}
                 {graphData.labels && <GraphLabels labels={graphData.labels} graphData={graphData} time={time} />}
-                {graphData.particles && surfaceData && (
+                {graphData.particles && (
                     <ParticleSystem 
-                        key={surfaceData.plotExpr}
+                        key={surfaceData?.plotExpr}
                         count={graphData.particles.count} 
                         potentialFn={potentialFn}
                         xRange={graphData.ranges.x} 
@@ -407,7 +435,7 @@ const ViewportPanel: React.FC<ViewportPanelProps> = ({
                 <CameraManager preset={activePreset} onTransitionEnd={() => setActivePreset(null)} />
                 <Grid position={[center[0], 0, center[2]]} fadeDistance={size*3} infiniteGrid />
             </Canvas>
-            <Colorbar mapName={graphData.colorMap || 'default'} zRange={z} />
+            {surfaceData && <Colorbar mapName={graphData.colorMap || 'default'} zRange={z} />}
             {effects.lyapunovViz && <LyapunovLegend />}
         </div>
     );

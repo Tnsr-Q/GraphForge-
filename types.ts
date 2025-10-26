@@ -1,3 +1,5 @@
+import { Vector3 } from "three";
+
 export interface Range {
   min: number;
   max: number;
@@ -13,10 +15,23 @@ export interface ParticleSystemProps {
   params: string[];
   body: string;
 }
-export interface Plot {
+export interface SurfacePlot {
   type: 'surface';
   expr: string;
 }
+
+export interface VectorPlot {
+  type: 'vector';
+  fnName: string;
+}
+
+export interface TensorPlot {
+  type: 'tensor';
+  fnName: string;
+  glyphType: 'ELLIPSOID';
+}
+
+export type Plot = SurfacePlot | VectorPlot | TensorPlot;
 
 export interface Animation {
     parameter: string;

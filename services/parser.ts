@@ -1,6 +1,6 @@
-import { GraphIR, Range, G3DFunction, Plot, ColorMapName, Contour } from '../types';
+import { GraphIR, Plot } from '../types';
 
-const VALID_COLOR_MAPS: ColorMapName[] = ['viridis', 'plasma', 'inferno', 'magma', 'hot', 'cool', 'default'];
+const VALID_COLOR_MAPS = ['viridis', 'plasma', 'inferno', 'magma', 'hot', 'cool', 'default'];
 const MAX_PARTICLES = 5000;
 
 export const parseG3D = (code: string): GraphIR => {
@@ -27,7 +27,7 @@ export const parseG3D = (code: string): GraphIR => {
   // Step 2: Pre-process to handle implicit multi-line DEF statements.
   const finalProcessedLines: string[] = [];
   let defBuffer = '';
-  const keywordsRegex = /^(SET|COLOR|PLOT3D|ANIMATE|PARTICLES|CONTOUR|LABEL)\s/i;
+  const keywordsRegex = /^(SET|COLOR|PLOT3D|PLOT_VECFIELD|PLOT_TENSOR|ANIMATE|PARTICLES|CONTOUR|LABEL)\s/i;
 
   for (const line of backslashProcessedLines) {
     if (line.match(/^DEF\s/i)) {
@@ -37,7 +37,10 @@ export const parseG3D = (code: string): GraphIR => {
       defBuffer = line;
     } 
     else if (defBuffer && !line.match(keywordsRegex)) {
-      defBuffer += ` ${line}`;
+      // FIX: Do not add a space when concatenating multi-line definitions.
+      // This prevents turning `[` and `[` on separate lines into `[ [` which is invalid for a matrix.
+      // Math.js is robust enough to handle expressions without spaces between operators.
+      defBuffer += line;
     } 
     else {
       if (defBuffer) {
@@ -97,7 +100,7 @@ export const parseG3D = (code: string): GraphIR => {
         if (colorMapFound) {
             throw new Error(`Line ${lineNumber}: Multiple COLOR MAP statements found. Only one is allowed.`);
         }
-        const mapName = colorMapMatch[1].toLowerCase() as ColorMapName;
+        const mapName = colorMapMatch[1].toLowerCase() as any;
         if (!VALID_COLOR_MAPS.includes(mapName)) {
             throw new Error(`Line ${lineNumber}: Invalid color map "${mapName}". Valid maps are: ${VALID_COLOR_MAPS.join(', ')}`);
         }
@@ -157,12 +160,11 @@ export const parseG3D = (code: string): GraphIR => {
     }
 
     // DEF FN_CONSTANT = 123 (parameter-less function, i.e. a constant)
-    // This must be checked before the main function definition regex.
     const defConstMatch = line.match(/^DEF\s+([^=()]+?)\s*=\s*(.*)/i);
     if (defConstMatch && !line.substring(0, line.indexOf('=')).includes('(')) {
         let name = defConstMatch[1].trim().replace(/\s+/g, '');
-        if (!name.toUpperCase().startsWith('FN')) {
-            name = 'FN' + name;
+        if (!name.toUpperCase().startsWith('FN') && !name.toUpperCase().startsWith('VEC_') && !name.toUpperCase().startsWith('TENSOR_')) {
+             throw new Error(`Line ${lineNumber}: Constant definition name must start with FN, VEC_, or TENSOR_.`);
         }
         const body = defConstMatch[2].trim();
         if (!body) {
@@ -175,10 +177,42 @@ export const parseG3D = (code: string): GraphIR => {
         return;
     }
     
+    // DEF VEC_MYVEC(x,y) = [x, y, 0]
+    const defVecFnMatch = line.match(/^DEF\s+(VEC_\w+)\s*\(([^)]*)\)\s*=\s*(.*)/i);
+    if (defVecFnMatch) {
+      const name = defVecFnMatch[1];
+      const params = defVecFnMatch[2].split(',').map(p => p.trim()).filter(p => p);
+      const body = defVecFnMatch[3].trim();
+      if (!body.startsWith('[') || !body.endsWith(']')) {
+        throw new Error(`Line ${lineNumber}: Vector function body must be enclosed in square brackets [].`);
+      }
+      if (ir.functions[name]) {
+        throw new Error(`Line ${lineNumber}: Function '${name}' is already defined.`);
+      }
+      ir.functions[name] = { params, body };
+      return;
+    }
+    
+    // DEF TENSOR_MYTENSOR(x,y) = [[x, y], [y, x]]
+    const defTensorFnMatch = line.match(/^DEF\s+(TENSOR_\w+)\s*\(([^)]*)\)\s*=\s*(.*)/i);
+    if (defTensorFnMatch) {
+      const name = defTensorFnMatch[1];
+      const params = defTensorFnMatch[2].split(',').map(p => p.trim()).filter(p => p);
+      const body = defTensorFnMatch[3].trim();
+      if (!body.startsWith('[[') || !body.endsWith(']]')) {
+        throw new Error(`Line ${lineNumber}: Tensor function body must be a matrix enclosed in double square brackets [[]].`);
+      }
+      if (ir.functions[name]) {
+        throw new Error(`Line ${lineNumber}: Function '${name}' is already defined.`);
+      }
+      ir.functions[name] = { params, body };
+      return;
+    }
+
     // DEF FNZ(x,y) = 1.5 / ((x - 0.9)^2 + ...
-    const defFnMatch = line.match(/^DEF\s+FN(\w+)\s*\(([^)]*)\)\s*=(.*)/i);
+    const defFnMatch = line.match(/^DEF\s+(FN\w+)\s*\(([^)]*)\)\s*=(.*)/i);
     if (defFnMatch) {
-      const name = `FN${defFnMatch[1]}`;
+      const name = defFnMatch[1];
       const params = defFnMatch[2].split(',').map(p => p.trim()).filter(p => p);
       const body = defFnMatch[3].trim();
       if (!body) {
@@ -197,6 +231,23 @@ export const parseG3D = (code: string): GraphIR => {
       }
       ir.plots.push({ type: 'surface', expr });
       return;
+    }
+
+    // PLOT_VECFIELD VEC_FLOW
+    const plotVecFieldMatch = line.match(/^PLOT_VECFIELD\s+(VEC_\w+)/i);
+    if (plotVecFieldMatch) {
+      const fnName = plotVecFieldMatch[1].trim();
+      ir.plots.push({ type: 'vector', fnName });
+      return;
+    }
+
+    // PLOT_TENSOR TENSOR_SHEAR AS GLYPH 'ELLIPSOID'
+    const plotTensorMatch = line.match(/^PLOT_TENSOR\s+(TENSOR_\w+)\s+AS\s+GLYPH\s+'(ELLIPSOID)'/i);
+    if (plotTensorMatch) {
+        const fnName = plotTensorMatch[1].trim();
+        const glyphType = plotTensorMatch[2].toUpperCase() as 'ELLIPSOID';
+        ir.plots.push({ type: 'tensor', fnName, glyphType });
+        return;
     }
 
     // ANIMATE t FROM 0 TO 6.28 STEP 0.05
@@ -223,8 +274,14 @@ export const parseG3D = (code: string): GraphIR => {
     throw new Error(`Line ${lineNumber}: Unknown or invalid statement: "${line}"`);
   });
 
-  if (ir.plots.length === 0) {
-    throw new Error('No PLOT3D statement found. Nothing to render.');
+  if (!ir.plots.some(p => p.type === 'surface')) {
+    const hasOtherPlots = ir.plots.some(p => p.type === 'vector' || p.type === 'tensor');
+    if (hasOtherPlots) {
+        // If there are vector or tensor plots but no surface, add a default flat plane.
+        ir.plots.unshift({ type: 'surface', expr: '0' });
+    } else {
+        throw new Error('No PLOT3D, PLOT_VECFIELD, or PLOT_TENSOR statement found. Nothing to render.');
+    }
   }
 
   return ir;
