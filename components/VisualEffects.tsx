@@ -1,13 +1,12 @@
-// FIX: Change React import to default import to fix JSX namespace issues with react-three-fiber.
-import React from 'react';
-// FIX: Import THREE to resolve namespace errors.
+import * as React from 'react';
 import * as THREE from 'three';
-import { Range } from '../types';
+import { Range, FieldlineConfig, ColorMapName, GraphIR } from '../../types';
 import { EffectsState } from './ViewportPanel';
 import { EPGlows } from './visual-effects/EPGlows';
 import { Streamlines } from './visual-effects/Streamlines';
 import { FluxHeatmap } from './visual-effects/FluxHeatmap';
 import { TopologicalRibbon } from './visual-effects/TopologicalRibbon';
+import { CriticalTransitionContour } from './visual-effects/CriticalTransitionContour';
 import { ControlsState } from './ControlsPanel';
 
 interface ParticlesState {
@@ -22,6 +21,9 @@ interface VisualEffectsProps {
     particlesStateRef: React.RefObject<ParticlesState>;
     particleCount: number;
     controls: ControlsState;
+    // New props for contour integration
+    functions?: any;
+    time?: number;
 }
 
 const VisualEffects: React.FC<VisualEffectsProps> = ({
@@ -31,8 +33,23 @@ const VisualEffects: React.FC<VisualEffectsProps> = ({
     yRange,
     particlesStateRef,
     particleCount,
-    controls
+    controls,
+    functions,
+    time = 0
 }) => {
+    
+    const fieldlineConfig: FieldlineConfig = React.useMemo(() => ({
+        mode: 'gradient',
+        source: 'potential',
+        density: 30,
+        length: 500,
+        seedPoints: 'random',
+        colorMap: 'plasma',
+        opacity: controls.fieldLineOpacity,
+        animate: false,
+        showArrows: true,
+    }), [controls.fieldLineOpacity]);
+
     return (
         <group>
             {effectsState.epGlows && <EPGlows 
@@ -45,14 +62,23 @@ const VisualEffects: React.FC<VisualEffectsProps> = ({
                 }}
                 intensityFactor={controls.epGlowIntensity}
             />}
-            {effectsState.streamlines && <Streamlines 
-                potentialFn={potentialFn} 
-                xRange={xRange} 
-                yRange={yRange} 
-                opacity={controls.fieldLineOpacity}
+            {effectsState.streamlines && <Streamlines
+                potentialFn={potentialFn}
+                xRange={xRange}
+                yRange={yRange}
+                config={fieldlineConfig}
             />}
             {effectsState.fluxHeatmap && particleCount > 0 && <FluxHeatmap particlePositions={particlesStateRef.current.positions} xRange={xRange} yRange={yRange} particleCount={particleCount}/>}
-            {effectsState.topologicalRibbon && <TopologicalRibbon potentialFn={potentialFn} />}
+            {effectsState.topologicalRibbon && <TopologicalRibbon potentialFn={potentialFn} damping={controls.damping} />}
+            
+            {/* The Critical Transition Contour (AP' = -1/3) */}
+            {functions && <CriticalTransitionContour 
+                functions={functions} 
+                xRange={xRange} 
+                yRange={yRange} 
+                time={time} 
+                potentialFn={potentialFn} 
+            />}
         </group>
     );
 };

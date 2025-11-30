@@ -1,5 +1,4 @@
-// FIX: Change React import to default import to fix JSX namespace issues with react-three-fiber.
-import React from 'react';
+import * as React from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { Billboard, Plane } from '@react-three/drei';

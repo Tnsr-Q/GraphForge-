@@ -1,6 +1,5 @@
-// FIX: Change React import to default import to fix JSX namespace issues with react-three-fiber.
-import React from 'react';
-import { Canvas, useFrame, ThreeEvent } from '@react-three/fiber';
+import * as React from 'react';
+import { Canvas, useFrame, ThreeEvent, useThree } from '@react-three/fiber';
 import { Grid, Text, CameraControls } from '@react-three/drei';
 import * as THREE from 'three';
 import { GraphIR, Animation, ColorMapName, Label as LabelType, G3DFunction, ExperimentalPoint, ValidationResults, SurfacePlot, VectorPlot, TensorPlot } from '../types';
@@ -68,6 +67,27 @@ const CameraManager: React.FC<{ preset: string | null; onTransitionEnd: () => vo
     }, [onTransitionEnd]);
 
     return <CameraControls ref={controlsRef} />;
+};
+
+// Component to dynamically adjust camera clipping planes based on scene size
+// This prevents microscopic objects from being clipped by the default near plane (0.1)
+const CameraAdjuster: React.FC<{ size: number }> = ({ size }) => {
+    const { camera } = useThree();
+    
+    React.useLayoutEffect(() => {
+        // Ensure near plane is small enough for the object, but not 0
+        // For size 0.004, near should be ~0.00004
+        const near = Math.max(1e-7, Math.min(0.1, size / 1000));
+        const far = Math.max(1000, size * 1000);
+        
+        if (camera.near !== near || camera.far !== far) {
+            camera.near = near;
+            camera.far = far;
+            camera.updateProjectionMatrix();
+        }
+    }, [size, camera]);
+    
+    return null;
 };
 
 const generateSurfaceData = (graphData: GraphIR): SurfaceData | null => {
@@ -251,6 +271,15 @@ const AnimationController: React.FC<{ isPlaying: boolean; animation: Animation |
   useFrame(() => { if (isPlaying && animation) { setTime(t => (t + animation.step > animation.to) ? animation.from : t + animation.step); } }); return null;
 };
 
+const isWebGLAvailable = () => {
+    try {
+        const canvas = document.createElement('canvas');
+        return !!(window.WebGLRenderingContext && (canvas.getContext('webgl') || canvas.getContext('experimental-webgl')));
+    } catch (e) {
+        return false;
+    }
+};
+
 interface ViewportPanelProps {
   graphData: GraphIR | null;
   error: string | null;
@@ -277,6 +306,7 @@ const ViewportPanel: React.FC<ViewportPanelProps> = ({
   const [isRecording, setIsRecording] = React.useState(false);
   const [recordProgress, setRecordProgress] = React.useState(0);
   const [activePreset, setActivePreset] = React.useState<string | null>(null);
+  const [hasWebGL, setHasWebGL] = React.useState(() => isWebGLAvailable());
   
   const [isMeasurementMode, setIsMeasurementMode] = React.useState(false);
   const [measurementData, setMeasurementData] = React.useState<MeasurementData>({ points: [], path: null, distance: null });
@@ -356,6 +386,21 @@ const ViewportPanel: React.FC<ViewportPanelProps> = ({
   const handleExportGRTL = () => { /* ... (unchanged) ... */ };
 
   const renderContent = () => {
+    if (!hasWebGL) {
+        return (
+            <div className="flex flex-col items-center justify-center h-full text-center text-red-400 p-8">
+                <ExclamationIcon className="h-16 w-16 mb-4 text-red-500" />
+                <h3 className="text-xl font-bold text-white mb-2">WebGL Not Available</h3>
+                <p className="max-w-md text-gray-300">
+                    Your browser or device does not support WebGL, which is required to render 3D graphics. 
+                    Please check your browser settings or try a different device.
+                </p>
+                <div className="mt-4 p-3 bg-gray-800 rounded text-xs font-mono text-gray-400 text-left">
+                   Error code: CONTEXT_CREATION_FAILED
+                </div>
+            </div>
+        );
+    }
     if (error) return <div className="flex flex-col items-center justify-center h-full text-center text-red-400"><ExclamationIcon className="h-12 w-12 mb-4" /><h3 className="text-lg font-semibold">Parsing Error</h3><p className="font-mono bg-red-900/50 p-4 rounded-md mt-2 text-sm">{error}</p></div>;
     if (!graphData || graphData.plots.length === 0) return <div className="flex flex-col items-center justify-center h-full text-center text-gray-500"><GraphIcon className="h-12 w-12 mb-4" /><h3 className="text-lg font-semibold">No Data to Display</h3><p className="mt-2 text-sm">Valid G3D code will render a plot here.</p></div>;
     
@@ -365,8 +410,19 @@ const ViewportPanel: React.FC<ViewportPanelProps> = ({
 
     return (
         <div ref={viewportRef} className="w-full h-full bg-gray-850 rounded-md overflow-hidden relative">
-            <Canvas gl={{ preserveDrawingBuffer: true }} camera={{ position: [center[0], center[1] + size * 1.5, center[2] + size * 1.5], fov: 50 }} onCreated={({ gl }) => { canvasRef.current = gl.domElement; }}>
+            <Canvas 
+                gl={{ preserveDrawingBuffer: true }} 
+                camera={{ 
+                    position: [center[0], center[1] + size * 1.5, center[2] + size * 1.5], 
+                    fov: 50
+                }} 
+                onCreated={({ gl }) => { canvasRef.current = gl.domElement; }}
+            >
                 <color attach="background" args={['#182030']} />
+                
+                {/* Dynamically adjust camera near/far to prevent clipping of small objects */}
+                <CameraAdjuster size={size} />
+
                 <ambientLight intensity={Math.PI / 2} />
                 <spotLight position={[size, size * 2, size]} angle={0.3} penumbra={1} distance={0} intensity={Math.PI * 2} />
                 <pointLight position={[-size, -size, -size]} distance={0} intensity={Math.PI} />
@@ -421,6 +477,8 @@ const ViewportPanel: React.FC<ViewportPanelProps> = ({
                     particlesStateRef={particlesStateRef}
                     particleCount={graphData.particles?.count ?? 0}
                     controls={controls}
+                    functions={graphData.functions}
+                    time={time}
                 />
                 {isMeasurementMode && <DistanceMeasurement data={measurementData} />}
 

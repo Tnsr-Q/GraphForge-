@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { ErrorInfo, ReactNode } from 'react';
 import { ExclamationIcon } from './Icons';
 
 interface Props {
-  children: React.ReactNode;
+  children?: ReactNode;
 }
 
 interface State {
@@ -10,7 +10,6 @@ interface State {
   error?: Error;
 }
 
-// Fix: The ErrorBoundary class must extend React.Component to be a valid React class component. This provides access to `this.props` and `this.setState`.
 class ErrorBoundary extends React.Component<Props, State> {
   public state: State = {
     hasError: false,
@@ -21,9 +20,13 @@ class ErrorBoundary extends React.Component<Props, State> {
     return { hasError: true, error };
   }
 
-  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error("Uncaught error:", error, errorInfo);
   }
+
+  handleRecover = () => {
+    this.setState({ hasError: false, error: undefined });
+  };
 
   render() {
     if (this.state.hasError) {
@@ -37,7 +40,7 @@ class ErrorBoundary extends React.Component<Props, State> {
                 {this.state.error?.toString()}
             </p>
             <button
-                onClick={() => this.setState({ hasError: false, error: undefined })}
+                onClick={this.handleRecover}
                 className="mt-6 px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-md text-sm font-semibold transition-colors"
             >
                 Try to Recover

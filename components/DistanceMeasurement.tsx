@@ -1,4 +1,4 @@
-import React from 'react';
+import * as React from 'react';
 import * as THREE from 'three';
 import { Sphere, Line, Html } from '@react-three/drei';
 

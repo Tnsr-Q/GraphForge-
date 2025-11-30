@@ -22,8 +22,8 @@ const App: React.FC = () => {
   const [showExpOverlay, setShowExpOverlay] = useState<boolean>(true);
 
   const [controls, setControls] = useState<ControlsState>({
-    damping: 0.5,
-    forceCoupling: 2.0,
+    damping: 0.15,
+    forceCoupling: 1.2,
     trailLength: 50,
     epGlowIntensity: 1.0,
     particleSize: 0.35,
@@ -46,21 +46,26 @@ const App: React.FC = () => {
   const handleControlChange = useCallback((key: keyof ControlsState, value: number) => {
     setControls(prev => ({ ...prev, [key]: value }));
 
-    // Update G3D code for residues
-    if (key.includes('Residue')) {
-        const residueMap: { [key: string]: string } = {
-            ep1Residue: 'FNEP1_RESIDUE',
-            ep2Residue: 'FNEP2_RESIDUE',
-            ep3Residue: 'FNEP3_RESIDUE',
-            ep4Residue: 'FNEP4_RESIDUE',
-        };
-        const residueName = residueMap[key as keyof typeof residueMap];
-        if (residueName) {
-            setG3dCode(currentCode => {
-                const regex = new RegExp(`(DEF\\s+${residueName}\\s*=\\s*)[-0-9.]+`, 'i');
-                return currentCode.replace(regex, `$1${value.toFixed(2)}`);
-            });
-        }
+    // Update G3D code variables
+    const varMap: { [key: string]: string } = {
+        ep1Residue: 'FNEP1_RESIDUE',
+        ep2Residue: 'FNEP2_RESIDUE',
+        ep3Residue: 'FNEP3_RESIDUE',
+        ep4Residue: 'FNEP4_RESIDUE',
+        damping: 'FN_GAMMA',
+        forceCoupling: 'FN_ALPHA',
+    };
+
+    const varName = varMap[key as keyof typeof varMap];
+    if (varName) {
+        setG3dCode(currentCode => {
+            // Regex to find "DEF VARNAME = value" (case insensitive)
+            const regex = new RegExp(`(DEF\\s+${varName}\\s*=\\s*)[-0-9.]+`, 'i');
+            if (regex.test(currentCode)) {
+                return currentCode.replace(regex, `$1${value.toFixed(3)}`);
+            }
+            return currentCode;
+        });
     }
   }, []);
 

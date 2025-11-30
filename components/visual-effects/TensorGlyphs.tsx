@@ -1,5 +1,4 @@
-import React from 'react';
-import { useLayoutEffect, useMemo, useRef } from 'react';
+import * as React from 'react';
 import * as THREE from 'three';
 import { GraphIR, TensorPlot } from '../../types';
 import { createConfiguredMathParser } from '../../services/math-parser';
@@ -16,9 +15,9 @@ const GRID_SIZE = 20;
 const GLYPH_SCALE_FACTOR = 0.25;
 
 export const TensorGlyphs: React.FC<TensorGlyphsProps> = ({ plot, graphData, potentialFn, time }) => {
-    const meshRef = useRef<THREE.InstancedMesh>(null!);
+    const meshRef = React.useRef<THREE.InstancedMesh>(null!);
     
-    const glyphData = useMemo(() => {
+    const glyphData = React.useMemo(() => {
         const mathParser = createConfiguredMathParser(graphData.functions);
         const tensorFn = graphData.functions[plot.fnName];
         if (!tensorFn) return null;
@@ -40,6 +39,12 @@ export const TensorGlyphs: React.FC<TensorGlyphsProps> = ({ plot, graphData, pot
                 
                 mathParser.set('x', x);
                 mathParser.set('y', y);
+                
+                // Map function parameters to coordinates if custom names are used
+                if (tensorFn.params) {
+                    if (tensorFn.params[0]) mathParser.set(tensorFn.params[0], x);
+                    if (tensorFn.params[1]) mathParser.set(tensorFn.params[1], y);
+                }
                 
                 try {
                     const tensorResult = mathParser.evaluate(tensorFn.body);
@@ -86,7 +91,7 @@ export const TensorGlyphs: React.FC<TensorGlyphsProps> = ({ plot, graphData, pot
         return { matrices, colors };
     }, [plot, graphData, potentialFn, time]);
 
-    useLayoutEffect(() => {
+    React.useLayoutEffect(() => {
         if (!meshRef.current || !glyphData) return;
 
         const { matrices, colors } = glyphData;
@@ -105,13 +110,13 @@ export const TensorGlyphs: React.FC<TensorGlyphsProps> = ({ plot, graphData, pot
 
     }, [glyphData]);
 
-    const sphereGeometry = useMemo(() => {
+    const sphereGeometry = React.useMemo(() => {
         const geo = new THREE.SphereGeometry(1, 10, 6); // Base size is 1, will be scaled
         geo.setAttribute('instanceColor', new THREE.InstancedBufferAttribute(new Float32Array(GRID_SIZE * GRID_SIZE * 3), 3));
         return geo;
     }, []);
 
-    const glyphMaterial = useMemo(() => {
+    const glyphMaterial = React.useMemo(() => {
         const mat = new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.1, roughness: 0.6 });
         mat.onBeforeCompile = (shader) => {
             shader.vertexShader = 'attribute vec3 instanceColor;\nvarying vec3 vInstanceColor;\n' + shader.vertexShader;

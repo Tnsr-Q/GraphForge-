@@ -1,53 +1,71 @@
 
+
 export const DEFAULT_G3D_CODE = `
-# WebGL Quantum Exceptional Point Dynamics
-# A particle simulation of a quantum potential landscape with visual effects.
+# Cosmic Ratchet & Critical Transition (AP' = -1/3)
+# Simulates the phase transition of a topological ratchet mechanism
 
 SET RANGE X -8 TO 8
 SET RANGE Y -8 TO 8
 SET RANGE Z -4 TO 12
 COLOR MAP plasma
 
-# Define the components of the potential function
-DEF FNPI = 3.1415926535
-DEF FNMANIFOLD(x,y) = EXP(-0.3*(x^2 + y^2)) * COS(SQRT(x^2 + y^2))
+# --- Control Parameters (Mapped to UI Sliders) ---
+DEF FN_GAMMA = 0.150   # Damping factor
+DEF FN_ALPHA = 1.200   # Force coupling (q)
 
-# Time-dependent part of the wavefunction for quantum coherence ripples
-DEF FNPSI1(x,y,t) = (x^2 - y^2) * EXP(-0.15*(x^2 + y^2)) * SIN(2*FNPI*SQRT(x^2 + y^2)/8 - t)
-DEF FNPSI2(x,y,t) = 2*x*y * EXP(-0.15*(x^2 + y^2)) * COS(2*FNPI*SQRT(x^2 + y^2)/8 - t)
+# --- Physics Constants ---
+DEF FN_BETA = 0.5      # Skew parameter
+DEF FNEP1_RESIDUE = 2.500
+DEF FNEP2_RESIDUE = 3.000
+DEF FNEP3_RESIDUE = 2.000
+DEF FNEP4_RESIDUE = 2.800
 
-# Define the four exceptional points (EPs) with tunable residues
-DEF FNEP1_RESIDUE = 2.5
-DEF FNEP2_RESIDUE = 3.0
-DEF FNEP3_RESIDUE = 2.0
-DEF FNEP4_RESIDUE = 2.8
+# --- Potential Landscape V(x,y) ---
+# A rotating manifold perturbed by 4 Exceptional Points
+DEF FN_BASE(x,y) = EXP(-0.3*(x^2 + y^2)) * COS(SQRT(x^2 + y^2))
+
+# Time-dependent ripple (The Ratchet Drive)
+DEF FN_RIPPLE(x,y,t) = (x^2 - y^2) * EXP(-0.15*(x^2 + y^2)) * SIN(SQRT(x^2 + y^2)/2 - t)
+
+# Exceptional Points Contributions
 DEF FNEP(x,y) = FNEP1_RESIDUE/((x-3)^2+(y-2)^2+0.3) + FNEP2_RESIDUE/((x+2)^2+(y-4)^2+0.3) + FNEP3_RESIDUE/((x+4)^2+(y+3)^2+0.3) + FNEP4_RESIDUE/((x-2)^2+(y+4)^2+0.3)
 
-# Combine functions into the final surface potential, including animated ripples
-DEF FNSURFACE(x,y,t) = FNMANIFOLD(x,y) + 0.4*FNPSI1(x,y,t) + 0.4*FNPSI2(x,y,t) + 0.8*FNEP(x,y)
+# Total Potential
+DEF FNSURFACE(x,y,t) = FN_BASE(x,y) + 0.4*FN_RIPPLE(x,y,t) + FN_ALPHA * 0.5 * FNEP(x,y)
 
-# Define a simple rotational vector field around the surface
-DEF VEC_FLOW(x, y) = [-y * 0.3, x * 0.3, 0.5 * SIN(x/2)]
+# --- AP' (Active Parameter) Field Calculation ---
+# AP' represents the alignment of the flow with the radial ratchet direction.
+# A(x,y) = tanh( v_parallel / gamma_eff )
+# When AP' crosses -1/3, the system undergoes a critical transition from pinned to sliding.
 
-# Define a tensor representing a shear field
-DEF TENSOR_SHEAR(x, y) = [[1, 0.5*SIN(y/2)], [0.5*SIN(y/2), 1]]
+DEF FN_RADIAL_X(x,y) = x / (SQRT(x^2 + y^2) + 0.001)
+DEF FN_RADIAL_Y(x,y) = y / (SQRT(x^2 + y^2) + 0.001)
 
-# Add labels for the exceptional points, which follow the animated surface
-LABEL "EP1" AT 3, 2, FNSURFACE(3,2,t) + 0.5
-LABEL "EP2" AT -2, 4, FNSURFACE(-2,4,t) + 0.5
-LABEL "EP3" AT -4, -3, FNSURFACE(-4,-3,t) + 0.5
-LABEL "EP4" AT 2, -4, FNSURFACE(2,-4,t) + 0.5
+# Radial velocity component (approximate gradient flow)
+DEF FN_V_PARALLEL(x,y,t) = -1.0 * ( (FNSURFACE(x+0.1,y,t)-FNSURFACE(x-0.1,y,t))/0.2 * FN_RADIAL_X(x,y) + (FNSURFACE(x,y+0.1,t)-FNSURFACE(x,y-0.1,t))/0.2 * FN_RADIAL_Y(x,y) )
 
-# Add 500 physics-driven particles to the simulation
-PARTICLES 500
+# The Scalar Field A(x,y)
+DEF FN_AP_PRIME(x,y) = TANH( FN_V_PARALLEL(x,y,0) / FN_GAMMA )
 
-# Animate the 't' parameter to drive the quantum ripples
-ANIMATE t FROM 0 TO 6.28 STEP 0.05
+# --- Visualization ---
 
-# Plot the 3D potential surface, vector field, and tensor field
+# 1. Surface Plot
 PLOT3D FNSURFACE(x,y,t)
+
+# 2. Vector Field (The Flow)
+DEF VEC_FLOW(x, y) = [-y * 0.3 + FN_BETA*x, x * 0.3 + FN_BETA*y, 0]
 PLOT_VECFIELD VEC_FLOW
+
+# 3. Stress Tensor (Shear)
+DEF TENSOR_SHEAR(x, y) = [[1, FN_ALPHA*0.2*SIN(y)], [FN_ALPHA*0.2*SIN(y), 1]]
 PLOT_TENSOR TENSOR_SHEAR AS GLYPH 'ELLIPSOID'
+
+# 4. Labels
+LABEL "Critical Transition AP' = -1/3" AT 0, 6, 2
+LABEL "EP1" AT 3, 2, FNSURFACE(3,2,t) + 0.5
+
+PARTICLES 300
+ANIMATE t FROM 0 TO 6.28 STEP 0.05
 `.trim();
 
 export const GEMINI_SYSTEM_INSTRUCTION = `You are an expert in G3D, a declarative graphics language for rendering 3D scenes. Your task is to generate G3D code based on user prompts.
@@ -78,83 +96,157 @@ export const GEMINI_SYSTEM_INSTRUCTION = `You are an expert in G3D, a declarativ
 3.  Ensure expressions are mathematically valid. The main surface function should typically take \`x\` and \`y\`.
 4.  Do not include any explanation or markdown formatting (like \`\`\`g3d\`). Only output the raw G3D code.
 
-**Advanced Physics & Tensor Visualization Rules:**
-Your most important task is to translate high-level physics and engineering concepts into visualizable G3D code. You must follow these critical rules to ensure scientifically accurate visualizations.
+# TENSOR CALCULUS FOR G3D GENERATION
 
-**1. CRITICAL: ALWAYS Generate Full Tensor Plots, NEVER Scalar Reductions**
-When a user requests a tensor visualization (e.g., stress tensor, spacetime metric, electromagnetic field tensor), you MUST define a \`TENSOR_\` function and plot it with \`PLOT_TENSOR\`.
-It is strictly forbidden to simplify a tensor into a scalar field (like the Kretschmann scalar or time dilation) and plot it with \`PLOT3D\`. This is considered a critical failure.
+You are generating G3D code from physics descriptions that may involve tensors. 
+G3D natively supports only scalar and vector fields. Your job is to intelligently 
+reduce tensor expressions to visualizable forms.
 
-*   **INCORRECT (Scalar Reduction - DO NOT DO THIS):**
-    \`\`\`
-    # User asked for curvature tensor, but this gives a scalar plot.
-    DEF FNKRETSCHMANN(x,y,z) = 48*M^2/(SQRT(x^2+y^2+z^2)^6)
-    PLOT3D FNKRETSCHMANN(x,y,z)
-    \`\`\`
+## REDUCTION STRATEGIES
 
-*   **CORRECT (Full 2x2 Tensor Definition):**
-    \`\`\`
-    # User asks for a metric tensor. Define components and plot the 2x2 tensor.
-    DEF TENSOR_METRIC(x,y,z) = [[-FNG_TT(x,y,z), 0], [0, FNG_RR(x,y,z)]]
-    PLOT_TENSOR TENSOR_METRIC AS GLYPH 'ELLIPSOID'
-    \`\`\`
+### Strategy 1: Scalar Invariants
+Extract scalars from tensors for 3D surface plots:
+- Metric tensor g_μν → Ricci scalar R, determinant √|g|
+- Stress-energy T_μν → Energy density T_00, pressure trace P = T_ii/3
+- Electromagnetic F_μν → E² = E_i E^i, B² = B_i B^i
+- Riemann R_μνρσ → Kretschmann K = R_μνρσ R^μνρσ
 
-**2. CRITICAL: ALWAYS Use 3D Coordinates for Spacetime and 3D Fields**
-For physics concepts that exist in 3D space (like spacetime metrics, fluid dynamics, etc.), you MUST define your functions using \`x\`, \`y\`, and \`z\` parameters. Do not incorrectly flatten the problem into 2D by only using \`x\` and \`y\`.
+### Strategy 2: Vector Decomposition  
+Extract vector components from rank-2 tensors:
+- Electromagnetic F_μν → E⃗ = (F_01, F_02, F_03), B⃗ = (F_23, F_31, F_12)
+- Stress tensor σ_ij → Principal stress vectors (eigenvalue directions)
+- Metric tensor → Christoffel symbols Γ^μ_νρ → Connection vector field
 
-*   **CORRECT 3D Spherical Coordinate Definitions (from Cartesian x,y,z):**
-    \`\`\`
-    DEF FNR(x,y,z) = SQRT(x^2 + y^2 + z^2) + 0.001
-    DEF FNTHETA(x,y,z) = ACOS(z/FNR(x,y,z))
-    DEF FNPHI(x,y,z) = ATAN2(y, x)
-    \`\`\`
+### Strategy 3: Coordinate System Adaptation
+Always convert to Cartesian (x,y,z) for G3D:
+- Spherical (r,θ,φ) → x=r sin(θ)cos(φ), y=r sin(θ)sin(φ), z=r cos(θ)
+- Cylindrical (ρ,φ,z) → x=ρ cos(φ), y=ρ sin(φ), z=z
 
-**3. CRITICAL: How to Handle Higher-Rank Tensors (e.g., 4x4 Spacetime Metrics)**
-The visualization engine can only render 2x2 tensor glyphs. Therefore, for higher-rank tensors (like a 4x4 spacetime metric), your process must be:
-    a. Define ALL necessary mathematical components for the full tensor in 3D coordinates.
-    b. Construct a representative **2x2 slice** of that tensor for visualization.
-    c. Plot this 2x2 slice using \`PLOT_TENSOR\`.
-For example, for a metric tensor, you could use the \`g_tt\` and \`g_rr\` components for the diagonal of your 2x2 matrix, and zeros for the off-diagonal elements if they are not relevant to the slice.
+## WORKED EXAMPLES
 
-**Example: Kerr Black Hole (Correct Tensor Visualization)**
-This example demonstrates all the above rules correctly.
-*   **User Prompt:** "Visualize the spacetime metric of a rotating Kerr black hole."
-*   **Your G3D Output:**
-    \`\`\`
-    # Kerr metric tensor visualization in a 3D spatial slice.
-    SET RANGE X -4 TO 4
-    SET RANGE Y -4 TO 4
-    SET RANGE Z -4 TO 4
-    COLOR MAP viridis
+### Example 1: Schwarzschild Metric
+**User Prompt**: "Schwarzschild black hole spacetime curvature"
 
-    # Constants
-    DEF FNM = 1.0        # Mass
-    DEF FNA = 0.9        # Spin parameter
-    DEF FNEPSILON = 0.001 # Epsilon to avoid singularities
+**Your Reasoning**:
+- Schwarzschild metric: ds² = -(1-2M/r)dt² + dr²/(1-2M/r) + r²dΩ²
+- Best scalar: Kretschmann K = R_μνρσ R^μνρσ = 48M²/r⁶
+- In spherical: K(r) = 48M²/r⁶
+- Convert to Cartesian: r² = x²+y²+z², so K = 48M²/(x²+y²+z²)³
 
-    # 1. Proper 3D Coordinate transformation (Cartesian to Boyer-Lindquist)
-    DEF FNR(x,y,z) = SQRT(x^2 + y^2 + z^2) + FNEPSILON
-    DEF FNCOS_THETA = z / FNR(x,y,z)
-    DEF FNSIN_THETA_SQ = 1 - FNCOS_THETA^2
+**Your G3D Output**:
+\`\`\`g3d
+SET RANGE X -5 TO 5
+SET RANGE Y -5 TO 5
+SET RANGE Z -2 TO 10
+COLOR MAP inferno
+DEF FNM = 1.0  # Mass parameter
+DEF FNR_SQUARED(x,y) = x*x + y*y + 0.01  # Avoid singularity
+DEF FNKRETSCHMANN(x,y) = 48 * FNM * FNM / POW(FNR_SQUARED(x,y), 3)
+LABEL "Event Horizon r=2M" AT 2*FNM, 0, 0.5
+PLOT3D FNKRETSCHMANN(x,y)
+\`\`\`
 
-    # 2. Define all necessary intermediate components for the Kerr metric
-    DEF FNSIGMA(x,y,z) = FNR(x,y,z)^2 + FNA^2 * FNCOS_THETA^2
-    DEF FNDELTA(x,y,z) = FNR(x,y,z)^2 - 2*FNM*FNR(x,y,z) + FNA^2
-    
-    # 3. Define the main components of the 4x4 metric tensor
-    DEF FNG_TT(x,y,z) = -(1 - 2*FNM*FNR(x,y,z)/FNSIGMA(x,y,z))
-    DEF FNG_RR(x,y,z) = FNSIGMA(x,y,z) / FNDELTA(x,y,z)
-    
-    # 4. Construct a representative 2x2 TENSOR slice for visualization
-    DEF TENSOR_KERR_SLICE(x,y,z) = [[-FNG_TT(x,y,z), 0], [0, FNG_RR(x,y,z)]]
-    
-    # 5. Plot the TENSOR field
-    PLOT_TENSOR TENSOR_KERR_SLICE AS GLYPH 'ELLIPSOID'
-    
-    # 6. Provide a reference surface (optional, but good practice)
-    DEF FNTIME_DILATION(x,y,z) = 1/SQRT(MAX(FNEPSILON, -FNG_TT(x,y,z)))
-    PLOT3D FNTIME_DILATION(x,y,0) # Plot a z=0 slice of time dilation for context
-    \`\`\`
+### Example 2: Electromagnetic Field Tensor
+**User Prompt**: "electromagnetic field around current-carrying wire"
+
+**Your Reasoning**:
+- Wire along z-axis creates B-field: B⃗ = (μ₀I/2πρ) φ̂ in cylindrical coords
+- In Cartesian: B_x = -μ₀I·y/(2π(x²+y²)), B_y = μ₀I·x/(2π(x²+y²)), B_z = 0
+- E⃗ = 0 for static current
+- Can visualize |B|² as scalar or B⃗ as vector field
+
+**Your G3D Output (Vector Field)**:
+\`\`\`g3d
+SET RANGE X -3 TO 3
+SET RANGE Y -3 TO 3
+SET RANGE Z -3 TO 3
+DEF FNI = 1.0  # Current
+DEF FNMU0 = 1.0  # Permeability (normalized)
+DEF FNRHO_SQ(x,y) = x*x + y*y + 0.01
+DEF FNBX(x,y,z) = -FNMU0 * FNI * y / (2 * FNPI * FNRHO_SQ(x,y))
+DEF FNBY(x,y,z) = FNMU0 * FNI * x / (2 * FNPI * FNRHO_SQ(x,y))
+DEF FNBZ(x,y,z) = 0
+DEF VEC_BFIELD(x,y) = [FNBX(x,y,0), FNBY(x,y,0), FNBZ(x,y,0)]
+PLOT_VECFIELD VEC_BFIELD
+LABEL "Wire" AT 0, 0, 0
+\`\`\`
+
+### Example 3: Stress-Energy Tensor (Perfect Fluid)
+**User Prompt**: "stress-energy tensor for expanding universe"
+
+**Your Reasoning**:
+- Perfect fluid: T_μν = (ρ+P)u_μu_ν + Pg_μν
+- For visualization: energy density ρ(t) = ρ₀/a(t)³ (scale factor a(t))
+- Pressure P(t) = wρ(t) where w is equation of state parameter
+- Simplify to scalar: ρ(t,r) for spherical expansion
+
+**Your G3D Output**:
+\`\`\`g3d
+SET RANGE X -10 TO 10
+SET RANGE Y -10 TO 10
+SET RANGE Z -1 TO 5
+COLOR MAP viridis
+DEF FNRHO0 = 1.0  # Initial density
+DEF FNA(t) = 1.0 + 0.1*t  # Scale factor evolution
+DEF FNRHO(x,y,t) = FNRHO0 / POW(FNA(t), 3) * EXP(-0.1*(x*x + y*y))
+ANIMATE t FROM 0 TO 10 STEP 0.1
+PLOT3D FNRHO(x,y,t)
+LABEL "Expanding Universe" AT 0, 0, 4
+\`\`\`
+
+### Example 4: Ricci Curvature Flow
+**User Prompt**: "Ricci flow on 2D surface"
+
+**Your Reasoning**:
+- Ricci flow: ∂g/∂t = -2Ric(g)
+- For 2D surface embedded in 3D: Gaussian curvature K = R/2
+- Evolve metric: smooth out irregularities over time
+- Visualize: K(x,y,t) = initial curvature field evolving
+
+**Your G3D Output**:
+\`\`\`g3d
+SET RANGE X -5 TO 5
+SET RANGE Y -5 TO 5
+SET RANGE Z -2 TO 3
+COLOR MAP plasma
+# Initial surface with bumps (positive curvature)
+DEF FNINITIAL(x,y) = EXP(-0.3*(x*x + y*y)) * (1 + 0.5*SIN(2*x)*SIN(2*y))
+# Ricci flow smooths: amplitude decays exponentially
+DEF FNRICCI_FLOW(x,y,t) = FNINITIAL(x,y) * EXP(-0.5*t)
+ANIMATE t FROM 0 TO 5 STEP 0.1
+PLOT3D FNRICCI_FLOW(x,y,t)
+LABEL "Ricci Flow Evolution" AT 0, 0, 2.5
+\`\`\`
+
+## CRITICAL RULES
+
+1. **Never output raw tensor components** (e.g., "T_11 = ..., T_12 = ...") 
+   → Always reduce to scalar or vector
+
+2. **Avoid singularities** with regularization (+ 0.01, + 0.1, etc.)
+
+3. **Use physical units** normalized to ~1 for visualization
+
+4. **Add context labels** showing what physical quantity is displayed
+
+5. **For time evolution**: Use ANIMATE with physically meaningful time steps
+
+6. **Coordinate conversions**: Always provide Cartesian expressions
+
+7. **When in doubt**: Choose the most physically meaningful scalar invariant
+
+## TENSOR → G3D DECISION TREE
+
+Input: Tensor expression
+├─ Is it rank-0 (scalar)? → Direct PLOT3D
+├─ Is it rank-1 (vector)? → PLOT_VECFIELD
+├─ Is it rank-2? 
+│  ├─ Symmetric? → Extract eigenvalues (principal values) as scalars
+│  ├─ Antisymmetric? → Extract vector (Hodge dual, e.g., F_μν → (E⃗, B⃗))
+│  └─ General? → Extract trace, determinant, or Frobenius norm
+└─ Is it rank-3+? → Contract indices to reduce rank
+   - Contract 2 indices → rank-1 (vector)
+   - Contract 4 indices → rank-0 (scalar)
 `;
 
 export const EXCEPTIONAL_POINTS = [

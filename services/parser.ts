@@ -1,4 +1,5 @@
 import { GraphIR, Plot } from '../types';
+import { createConfiguredMathParser } from './math-parser';
 
 const VALID_COLOR_MAPS = ['viridis', 'plasma', 'inferno', 'magma', 'hot', 'cool', 'default'];
 const MAX_PARTICLES = 5000;
@@ -163,8 +164,9 @@ export const parseG3D = (code: string): GraphIR => {
     const defConstMatch = line.match(/^DEF\s+([^=()]+?)\s*=\s*(.*)/i);
     if (defConstMatch && !line.substring(0, line.indexOf('=')).includes('(')) {
         let name = defConstMatch[1].trim().replace(/\s+/g, '');
-        if (!name.toUpperCase().startsWith('FN') && !name.toUpperCase().startsWith('VEC_') && !name.toUpperCase().startsWith('TENSOR_')) {
-             throw new Error(`Line ${lineNumber}: Constant definition name must start with FN, VEC_, or TENSOR_.`);
+        // Relaxed check: Allow FN, VEC, or TENSOR prefixes
+        if (!name.toUpperCase().startsWith('FN') && !name.toUpperCase().startsWith('VEC') && !name.toUpperCase().startsWith('TENSOR')) {
+             throw new Error(`Line ${lineNumber}: Constant definition name must start with FN, VEC, or TENSOR.`);
         }
         const body = defConstMatch[2].trim();
         if (!body) {
@@ -178,11 +180,19 @@ export const parseG3D = (code: string): GraphIR => {
     }
     
     // DEF VEC_MYVEC(x,y) = [x, y, 0]
-    const defVecFnMatch = line.match(/^DEF\s+(VEC_\w+)\s*\(([^)]*)\)\s*=\s*(.*)/i);
-    if (defVecFnMatch) {
-      const name = defVecFnMatch[1];
-      const params = defVecFnMatch[2].split(',').map(p => p.trim()).filter(p => p);
-      const body = defVecFnMatch[3].trim();
+    // Relaxed to allow any function name for vector-like definitions (bracketed body)
+    const defVecFnMatch = line.match(/^DEF\s+(VEC_\w+|FN\w+|TENSOR_\w+)\s*\(([^)]*)\)\s*=\s*(\[.*\])/i);
+    // Note: We use a specific regex for brackets to distinguish from scalars, but we can also rely on the generic FN match 
+    // if we just want to parse the body.
+    
+    // Actually, let's keep specific VEC/TENSOR matchers for strictness if desired, but here we want flexibility.
+    // The previous logic for defVecFnMatch enforced square brackets.
+    
+    const defVecExplicitMatch = line.match(/^DEF\s+(VEC_\w+)\s*\(([^)]*)\)\s*=\s*(.*)/i);
+    if (defVecExplicitMatch) {
+      const name = defVecExplicitMatch[1];
+      const params = defVecExplicitMatch[2].split(',').map(p => p.trim()).filter(p => p);
+      const body = defVecExplicitMatch[3].trim();
       if (!body.startsWith('[') || !body.endsWith(']')) {
         throw new Error(`Line ${lineNumber}: Vector function body must be enclosed in square brackets [].`);
       }
@@ -194,11 +204,11 @@ export const parseG3D = (code: string): GraphIR => {
     }
     
     // DEF TENSOR_MYTENSOR(x,y) = [[x, y], [y, x]]
-    const defTensorFnMatch = line.match(/^DEF\s+(TENSOR_\w+)\s*\(([^)]*)\)\s*=\s*(.*)/i);
-    if (defTensorFnMatch) {
-      const name = defTensorFnMatch[1];
-      const params = defTensorFnMatch[2].split(',').map(p => p.trim()).filter(p => p);
-      const body = defTensorFnMatch[3].trim();
+    const defTensorExplicitMatch = line.match(/^DEF\s+(TENSOR_\w+)\s*\(([^)]*)\)\s*=\s*(.*)/i);
+    if (defTensorExplicitMatch) {
+      const name = defTensorExplicitMatch[1];
+      const params = defTensorExplicitMatch[2].split(',').map(p => p.trim()).filter(p => p);
+      const body = defTensorExplicitMatch[3].trim();
       if (!body.startsWith('[[') || !body.endsWith(']]')) {
         throw new Error(`Line ${lineNumber}: Tensor function body must be a matrix enclosed in double square brackets [[]].`);
       }
@@ -233,8 +243,9 @@ export const parseG3D = (code: string): GraphIR => {
       return;
     }
 
-    // PLOT_VECFIELD VEC_FLOW
-    const plotVecFieldMatch = line.match(/^PLOT_VECFIELD\s+(VEC_\w+)/i);
+    // PLOT_VECFIELD VEC_FLOW or FN_FLOW
+    // Relaxed regex to allow any identifier
+    const plotVecFieldMatch = line.match(/^PLOT_VECFIELD\s+(\w+)/i);
     if (plotVecFieldMatch) {
       const fnName = plotVecFieldMatch[1].trim();
       ir.plots.push({ type: 'vector', fnName });
@@ -242,7 +253,8 @@ export const parseG3D = (code: string): GraphIR => {
     }
 
     // PLOT_TENSOR TENSOR_SHEAR AS GLYPH 'ELLIPSOID'
-    const plotTensorMatch = line.match(/^PLOT_TENSOR\s+(TENSOR_\w+)\s+AS\s+GLYPH\s+'(ELLIPSOID)'/i);
+    // Relaxed regex to allow any identifier
+    const plotTensorMatch = line.match(/^PLOT_TENSOR\s+(\w+)\s+AS\s+GLYPH\s+'(ELLIPSOID)'/i);
     if (plotTensorMatch) {
         const fnName = plotTensorMatch[1].trim();
         const glyphType = plotTensorMatch[2].toUpperCase() as 'ELLIPSOID';
@@ -251,18 +263,30 @@ export const parseG3D = (code: string): GraphIR => {
     }
 
     // ANIMATE t FROM 0 TO 6.28 STEP 0.05
-    const animateMatch = line.match(/^ANIMATE\s+(\w+)\s+FROM\s+([-\d.]+)\s+TO\s+([-\d.]+)\s+STEP\s+([-\d.]+)/i);
+    // Support expressions for range parameters (e.g. 2*PI)
+    const animateMatch = line.match(/^ANIMATE\s+(\w+)\s+FROM\s+(.+?)\s+TO\s+(.+?)\s+STEP\s+(.+)/i);
     if (animateMatch) {
         if (animationFound) {
             throw new Error(`Line ${lineNumber}: Multiple ANIMATE statements found. Only one is allowed.`);
         }
         const parameter = animateMatch[1];
-        const from = parseFloat(animateMatch[2]);
-        const to = parseFloat(animateMatch[3]);
-        const step = parseFloat(animateMatch[4]);
-        if (isNaN(from) || isNaN(to) || isNaN(step)) {
-            throw new Error(`Line ${lineNumber}: Invalid number in ANIMATE statement.`);
+        
+        // Evaluate the expressions using the parser
+        const parser = createConfiguredMathParser(ir.functions);
+        let from: number, to: number, step: number;
+        
+        try {
+             from = parser.evaluate(animateMatch[2]);
+             to = parser.evaluate(animateMatch[3]);
+             step = parser.evaluate(animateMatch[4]);
+        } catch (e: any) {
+             throw new Error(`Line ${lineNumber}: Invalid animation parameters. ${e.message}`);
         }
+
+        if (typeof from !== 'number' || typeof to !== 'number' || typeof step !== 'number' || isNaN(from) || isNaN(to) || isNaN(step)) {
+            throw new Error(`Line ${lineNumber}: Animation parameters must evaluate to valid numbers.`);
+        }
+        
         if (step <= 0) {
             throw new Error(`Line ${lineNumber}: STEP value must be positive.`);
         }

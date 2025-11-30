@@ -23,6 +23,13 @@ export interface SurfacePlot {
 export interface VectorPlot {
   type: 'vector';
   fnName: string;
+  tensorType?: string;
+  gridSize?: number;
+  physicsParams?: {
+      mass?: number;
+      charge?: number;
+      current?: number;
+  };
 }
 
 export interface TensorPlot {
@@ -57,6 +64,18 @@ export interface Particlestate {
   body: string;
 }
 export type ColorMapName = 'viridis' | 'plasma' | 'inferno' | 'magma' | 'hot' | 'cool' | 'default';
+
+export interface FieldlineConfig {
+  mode: 'gradient' | 'vector_field' | 'null_lines' | 'separatrix' | 'phase_portrait' | 'integral_curves';
+  source: 'potential' | 'custom_vector' | 'hamiltonian' | 'differential_eq';
+  density: number;
+  length: number;
+  seedPoints: 'random' | 'grid' | 'critical_points' | 'boundary' | 'custom';
+  colorMap: ColorMapName;
+  opacity: number;
+  animate: boolean;
+  showArrows: boolean;
+}
 
 export interface GraphIR {
   version: number;
